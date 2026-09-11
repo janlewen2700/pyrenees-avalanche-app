@@ -3,186 +3,412 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Avalanche & Weather Safety Network - Pyrenees</title>
-
-    <!-- Leaflet Mapping CSS -->
+    <title>Pyrenees Avalanche Network</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <!-- Application CSS -->
     <link rel="stylesheet" href="style.css" />
-    <!-- Chart.js for Weather Analysis -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 </head>
 <body>
-
-    <!-- Citizen Initiative Disclaimer Modal -->
     <div id="disclaimer-modal" class="modal-overlay">
         <div class="modal-card warning-card">
             <h2>⚠️ Safety & Liability Warning</h2>
-            <p>This network is a <strong>citizen science initiative</strong> combining official hazard forecasts (ICGC/EAWS) with unverified public field observations.</p>
+            <p>This is a <strong>citizen science initiative</strong> combining official sources with unverified public field observations.</p>
             <ul>
-                <li>Information can be incomplete or outdated.</li>
-                <li>Citizen observations are not safety guarantees.</li>
-                <li>Always carry transceiver, probe, and shovel in avalanche terrain.</li>
+                <li>Public observations may be incomplete, delayed, or wrong.</li>
+                <li>Map layers are not a substitute for the official avalanche bulletin or professional judgement.</li>
+                <li>Always carry avalanche rescue equipment and make independent terrain decisions.</li>
             </ul>
             <button id="accept-disclaimer-btn" class="btn btn-danger">I Understand & Agree</button>
         </div>
     </div>
 
-    <!-- Observation Logging Modal -->
     <div id="log-modal" class="modal-overlay hidden">
-        <div class="modal-card">
-            <span class="close-modal">&times;</span>
-            <h2>Log Field Observation</h2>
-            <form id="observation-form">
-                <input type="hidden" id="form-lat">
-                <input type="hidden" id="form-lng">
+        <div class="modal-card report-modal">
+            <button type="button" class="close-modal icon-btn" aria-label="Close">×</button>
+            <div id="form-step">
+                <h2>Log Field Observation</h2>
+                <p class="muted">The fast path captures avalanche/incident essentials. Slow adds a snowpack and stability-test section.</p>
+                <form id="observation-form">
+                    <input type="hidden" id="form-lat">
+                    <input type="hidden" id="form-lng">
 
-                <div class="form-group">
-                    <label>Type of Observation</label>
-                    <select id="form-type" required>
-                        <option value="avalanche">⚠️ Avalanche (Permanent Record)</option>
-                        <option value="snowpack">❄️ Snowpack Observation (Current Season)</option>
-                        <option value="trip_report">🎿 Trip Report (Current Season)</option>
-                        <option value="accident">🚨 Accident Report (Permanent Record)</option>
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label>Slope Aspect & Elevation</label>
-                    <div class="form-row">
-                        <select id="form-aspect">
-                            <option value="N">North (N)</option>
-                            <option value="NE">Northeast (NE)</option>
-                            <option value="E">East (E)</option>
-                            <option value="SE">Southeast (SE)</option>
-                            <option value="S">South (S)</option>
-                            <option value="SW">Southwest (SW)</option>
-                            <option value="W">West (W)</option>
-                            <option value="NW">Northwest (NW)</option>
-                        </select>
-                        <input type="number" id="form-elevation" placeholder="Elevation (m)" min="500" max="3500">
+                    <div class="mode-toggle" role="group" aria-label="Submission mode">
+                        <label><input type="radio" name="report-mode" value="fast" checked> <span>⚡ Fast</span></label>
+                        <label><input type="radio" name="report-mode" value="slow"> <span>🧪 Slow</span></label>
                     </div>
-                </div>
 
-                <div class="form-group">
-                    <label>Snowpack Details</label>
-                    <div class="form-row">
-                        <input type="number" id="form-slope" placeholder="Slope Angle (°)" min="0" max="60">
-                        <input type="number" id="form-weak-layer" placeholder="Weak Layer Depth (cm)" min="0" max="300">
+                    <div class="form-grid two">
+                        <div class="form-group">
+                            <label for="form-title">Report title</label>
+                            <input id="form-title" maxlength="100" placeholder="e.g. Wind slab above Vallter" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="form-type">Type of observation</label>
+                            <select id="form-type" required>
+                                <option value="avalanche">⚠️ Avalanche (permanent)</option>
+                                <option value="accident">🚨 Accident / incident (permanent)</option>
+                                <option value="snowpack">❄️ Snowpack (current season)</option>
+                                <option value="trip_report">🎿 Trip report (current season)</option>
+                            </select>
+                        </div>
                     </div>
-                </div>
 
-                <div class="form-group">
-                    <label>Notes & Field Description</label>
-                    <textarea id="form-notes" rows="3" placeholder="Describe snow stability, whumpfing, propagation, or avalanche size..." required></textarea>
-                </div>
+                    <div class="section-title">Avalanche / terrain essentials</div>
+                    <div class="form-grid three">
+                        <div class="form-group"><label>Aspect</label><select id="form-aspect"><option>N</option><option>NE</option><option>E</option><option>SE</option><option>S</option><option>SW</option><option>W</option><option>NW</option></select></div>
+                        <div class="form-group"><label>Elevation (m)</label><input type="number" id="form-elevation" min="0" max="4500" placeholder="2200"></div>
+                        <div class="form-group"><label>Slope angle (°)</label><input type="number" id="form-slope" min="0" max="90" placeholder="36"></div>
+                        <div class="form-group"><label>Avalanche size</label><select id="form-avalanche-size"><option value="">Unknown / N/A</option><option>1</option><option>1.5</option><option>2</option><option>2.5</option><option>3</option><option>3.5</option><option>4</option><option>4.5</option><option>5</option></select></div>
+                        <div class="form-group"><label>Character</label><select id="form-character"><option value="">Unknown / N/A</option><option>Wind slab</option><option>Storm slab</option><option>Persistent slab</option><option>Deep persistent slab</option><option>Wet slab</option><option>Loose dry</option><option>Loose wet</option><option>Cornice only</option><option>Cornice with slab</option></select></div>
+                        <div class="form-group"><label>Trigger</label><select id="form-trigger"><option value="">Unknown / N/A</option><option>Natural</option><option>Skier</option><option>Snowmobile</option><option>Other vehicle</option><option>Explosives</option><option>Remote</option></select></div>
+                        <div class="form-group"><label>Slab thickness (cm)</label><input type="number" id="form-slab-thickness" min="0" max="500"></div>
+                        <div class="form-group"><label>Slab width (m)</label><input type="number" id="form-slab-width" min="0" max="3000"></div>
+                        <div class="form-group"><label>Run length (m)</label><input type="number" id="form-run-length" min="0" max="10000"></div>
+                    </div>
 
-                <button type="submit" class="btn btn-primary">Submit Field Report</button>
-            </form>
+                    <div class="section-title">People involved</div>
+                    <div class="form-grid three">
+                        <div class="form-group"><label>Total group</label><input type="number" id="form-group-size" min="0" max="100" value="0"></div>
+                        <div class="form-group"><label>Fully buried</label><input type="number" id="form-fully-buried" min="0" max="100" value="0"></div>
+                        <div class="form-group"><label>Partly buried</label><input type="number" id="form-partly-buried" min="0" max="100" value="0"></div>
+                        <div class="form-group"><label>Caught, not buried</label><input type="number" id="form-caught" min="0" max="100" value="0"></div>
+                        <div class="form-group"><label>Injured</label><input type="number" id="form-injured" min="0" max="100" value="0"></div>
+                        <div class="form-group"><label>Fatalities</label><input type="number" id="form-fatalities" min="0" max="100" value="0"></div>
+                    </div>
+
+                    <div id="slow-fields" class="hidden-fieldset">
+                        <div class="section-title">Snowpack & stability test</div>
+                        <div class="form-grid three">
+                            <div class="form-group"><label>Snowpack depth (cm)</label><input type="number" id="form-snow-depth" min="0" max="1000"></div>
+                            <div class="form-group"><label>Weak-layer depth (cm)</label><input type="number" id="form-weak-layer" min="0" max="500"></div>
+                            <div class="form-group"><label>Whumpfing?</label><select id="form-whumpf"><option value="">Unknown</option><option>No</option><option>Yes</option></select></div>
+                            <div class="form-group"><label>Cracking?</label><select id="form-cracking"><option value="">Unknown</option><option>No</option><option>Yes</option></select></div>
+                            <div class="form-group"><label>Test type</label><select id="form-test-type"><option value="">No test</option><option>Compression Test (CT)</option><option>Extended Column Test (ECT)</option><option>Propagation Saw Test (PST)</option><option>Other</option></select></div>
+                            <div class="form-group"><label>Test result</label><select id="form-test-result"><option value="">N/A</option><option>Easy</option><option>Moderate</option><option>Hard</option><option>No failure</option></select></div>
+                            <div class="form-group"><label>Fracture character</label><select id="form-fracture"><option value="">N/A</option><option>Sudden planar</option><option>Sudden collapse</option><option>Resistant planar</option><option>Uneven break</option><option>No fracture</option></select></div>
+                            <div class="form-group"><label>Failure depth (cm)</label><input type="number" id="form-failure-depth" min="0" max="500"></div>
+                            <div class="form-group"><label>Failure-layer crystal</label><select id="form-crystal"><option value="">Unknown</option><option>Facets</option><option>Surface hoar</option><option>Depth hoar</option><option>Storm snow</option><option>Crust</option><option>Other</option></select></div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="form-notes">Notes & field description</label>
+                        <textarea id="form-notes" rows="4" placeholder="Describe what you saw, terrain, propagation, recent loading, rescue details, or uncertainty..." required></textarea>
+                    </div>
+                    <div id="submit-error" class="form-error hidden"></div>
+                    <button type="submit" class="btn btn-primary">Preview report</button>
+                </form>
+            </div>
+
+            <div id="preview-step" class="hidden">
+                <h2>Report preview</h2>
+                <p class="muted">Review before publishing. This summary is what other map users will see.</p>
+                <div id="report-preview" class="report-preview"></div>
+                <div class="button-row">
+                    <button id="edit-report-btn" class="btn btn-secondary" type="button">Back to edit</button>
+                    <button id="confirm-report-btn" class="btn btn-primary" type="button">Confirm & publish</button>
+                </div>
+            </div>
         </div>
     </div>
 
-    <!-- Main Navigation Header -->
+    <div id="toast" class="toast hidden" role="status"></div>
+
     <header class="app-header">
-        <div class="logo">🏔️ Pyrenees Avalanche Network</div>
+        <div class="header-row">
+            <div class="logo">🏔️ Pyrenees Avalanche Network</div>
+            <div class="language-switcher">
+                <button id="language-menu-btn" class="language-current" type="button" aria-haspopup="true" aria-expanded="false"><span id="current-language">🇬🇧 English</span> ▾</button>
+                <div id="language-menu" class="language-menu hidden">
+                    <button class="language-btn" data-lang="ca" type="button">🏴 Català</button>
+                    <button class="language-btn" data-lang="es" type="button">🇪🇸 Español</button>
+                    <button class="language-btn" data-lang="fr" type="button">🇫🇷 Français</button>
+                    <button class="language-btn" data-lang="de" type="button">🇩🇪 Deutsch</button>
+                    <button class="language-btn" data-lang="it" type="button">🇮🇹 Italiano</button>
+                    <button class="language-btn" data-lang="en" type="button">🇬🇧 English</button>
+                </div>
+            </div>
+        </div>
         <nav class="nav-tabs">
-            <button class="nav-btn active" data-page="page1">Page 1: Avalanche Hazard</button>
-            <button class="nav-btn" data-page="page2">Page 2: Weather & Snow History</button>
-            <button class="nav-btn" data-page="page3">Page 3: Safety & Rescue Hub</button>
+            <button class="nav-btn active" data-page="page1">Avalanche Hazard</button>
+            <button class="nav-btn" data-page="page2">Weather & Snow History</button>
+            <button class="nav-btn" data-page="page3">Learn & Rescue</button>
+            <button class="nav-btn" data-page="page4">Who we are</button>
         </nav>
     </header>
 
-    <!-- PAGE 1: Avalanche Danger Map & Observations -->
     <main id="page1" class="page-view active">
         <div id="map-avalanche" class="map-container"></div>
         <aside class="map-sidebar">
-            <h3>Layer Controls</h3>
-            <label class="checkbox-label"><input type="checkbox" id="toggle-bulletin" checked> Official Hazard Bulletin (ICGC)</label>
-            <label class="checkbox-label"><input type="checkbox" id="toggle-avalanches" checked> Avalanches (Permanent)</label>
-            <label class="checkbox-label"><input type="checkbox" id="toggle-accidents" checked> Accidents (Permanent)</label>
-            <label class="checkbox-label"><input type="checkbox" id="toggle-reports" checked> Current Season Reports</label>
-            
+            <button type="button" class="sidebar-close-btn" aria-label="Close panel">×</button>
+            <h3>Official + community layers</h3>
+            <label class="checkbox-label"><input type="checkbox" id="toggle-forecast-zones" checked> Official Pyrenees BPA regions</label>
+            <p id="bpa-region-status" class="status-note">Loading official warning-region polygons…</p>
+            <label class="checkbox-label"><input type="checkbox" id="toggle-avalanche-terrain"> ICGC mapped avalanche terrain (live WMS)</label>
+            <label class="checkbox-label"><input type="checkbox" id="toggle-avalanches" checked> Community avalanche markers</label>
+            <label class="checkbox-label"><input type="checkbox" id="toggle-accidents" checked> Community incident markers</label>
+            <label class="checkbox-label"><input type="checkbox" id="toggle-reports" checked> Snow/test/trip markers</label>
+
+            <div class="official-card">
+                <strong>Official avalanche bulletin</strong>
+                <p>Select a provider here, or click the map and the app will choose the appropriate bulletin for that location.</p>
+                <label class="compact-label" for="bulletin-provider-select">Bulletin provider</label>
+                <select id="bulletin-provider-select" class="sidebar-select"></select>
+                <div class="button-row stacked-mobile bulletin-buttons">
+                    <a id="official-bulletin-link" class="btn btn-secondary link-btn" href="https://bpa.icgc.cat/" target="_blank" rel="noopener">Open bulletin</a>
+                    <a id="official-pdf-link" class="btn btn-primary link-btn" href="/api/icgc/bulletin-pdf" target="_blank" rel="noopener">Current PDF</a>
+                </div>
+                <p id="bulletin-selection-note" class="status-note">Catalonia / ICGC selected.</p>
+            </div>
+
             <div class="legend-box">
-                <h4>EAWS Danger Scale</h4>
+                <h4>Community marker meaning</h4>
+                <div class="marker-symbol-grid">
+                    <span>▲ Avalanche</span><span>! Incident</span><span>T Stability test</span><span>❄ Snowpack</span><span>● Trip report</span>
+                </div>
+                <div class="marker-legend-row"><span class="mini-marker marker-blue">●</span> Blue = information only</div>
+                <div class="marker-legend-row"><span class="mini-marker marker-red">●</span> Red = incident / burial / injury</div>
+                <div class="marker-legend-row"><span class="mini-marker marker-black">●</span> Black = fatality</div>
+                <small>When reports share a point, symbol priority is avalanche → incident → stability test → snowpack → trip report.</small>
+            </div>
+
+            <div class="legend-box">
+                <h4>EAWS danger scale</h4>
                 <div class="legend-item"><span class="color-box d1"></span> 1 - Low</div>
                 <div class="legend-item"><span class="color-box d2"></span> 2 - Moderate</div>
                 <div class="legend-item"><span class="color-box d3"></span> 3 - Considerable</div>
                 <div class="legend-item"><span class="color-box d4"></span> 4 - High</div>
                 <div class="legend-item"><span class="color-box d5"></span> 5 - Very High</div>
-                <div class="legend-item"><span class="color-box d0"></span> Gray - Out of Season / Unissued</div>
+                <div class="legend-item"><span class="color-box d0"></span> Gray - no current machine-readable BPA</div>
             </div>
-            <p class="instruction-text">💡 Click anywhere on the map to log a new observation or avalanche.</p>
+            <p class="instruction-text">💡 Filled polygons are official EAWS warning regions. Click a polygon to see its current danger level, source bulletin, or log a report. Gray means no current machine-readable rating was available for that region.</p>
+            <p id="storage-status" class="status-note">Checking observation storage…</p>
         </aside>
     </main>
 
-    <!-- PAGE 2: Interactive Weather Forecast & Historical Analysis -->
     <main id="page2" class="page-view">
         <div id="map-weather" class="map-container"></div>
         <aside class="map-sidebar weather-sidebar">
-            <h3>Weather & Snowpack History</h3>
-            <p>Click any mountain location to load 14-day history from Open-Meteo.</p>
-            <div id="weather-details" class="weather-details">
-                <p><em>No location selected. Click on the map.</em></p>
+            <button type="button" class="sidebar-close-btn" aria-label="Close panel">×</button>
+            <h3>Weather & snow history</h3>
+            <p class="muted">Click a location. History uses Open-Meteo high-resolution archived forecasts.</p>
+            <div class="mode-toggle weather-range" role="group" aria-label="Weather history range">
+                <label><input type="radio" name="weather-range" value="14" checked> <span>Last 14 days</span></label>
+                <label><input type="radio" name="weather-range" value="winter"> <span>Season history</span></label>
             </div>
-            <div class="chart-container">
-                <canvas id="weatherChart"></canvas>
+            <p class="status-note">Season history starts at the first meaningful snowfall detected after 1 September (≥2 cm/day or ≥5 cm over 3 days), with 1 November as the fallback.</p>
+
+            <div class="official-card weather-layer-card">
+                <strong>Live Europe weather overlay</strong>
+                <div class="weather-overlay-options">
+                    <label><input type="radio" name="weather-overlay" value="temperature" checked> Temperature</label>
+                    <label><input type="radio" name="weather-overlay" value="gust"> Wind gust</label>
+                    <label><input type="radio" name="weather-overlay" value="precipitation"> Precipitation</label>
+                    <label><input type="radio" name="weather-overlay" value="none"> None</label>
+                </div>
+                <label class="checkbox-label radar-toggle"><input type="checkbox" id="toggle-radar" checked> Weather radar</label>
+                <div id="weather-overlay-legend" class="weather-overlay-legend"></div>
+                <p id="weather-overlay-status" class="status-note">Loading current European weather…</p>
+                <p id="radar-status" class="status-note">Loading radar…</p>
             </div>
+            <div id="weather-details" class="weather-details"><p><em>No location selected. Click on the map.</em></p></div>
+
+            <div class="weather-chart-card"><h4>Snow / rainfall</h4><canvas id="precipChart"></canvas></div>
+            <div class="weather-chart-card"><h4>Min / max temperature</h4><canvas id="tempChart"></canvas></div>
+            <div class="weather-chart-card"><h4>Wind</h4><canvas id="windChart"></canvas></div>
+            <div class="weather-chart-card"><h4>Sun / cloud proxy</h4><canvas id="sunChart"></canvas></div>
+            <div class="weather-chart-card"><h4>0°C isotherm</h4><canvas id="freezingChart"></canvas></div>
         </aside>
     </main>
 
-    <!-- PAGE 3: Avalanche Safety, Education & Emergency Hub -->
     <main id="page3" class="page-view">
-        <div class="content-container">
-            <h2>Emergency Mountain Rescue Numbers</h2>
-            <div class="emergency-grid">
-                <div class="emergency-card">
-                    <h3>🇪🇸 Catalonia & Spain</h3>
-                    <p class="phone-number">112</p>
-                    <p>GRAE (Grup de Recolzament d'Actuacions Especials)</p>
+        <div class="content-container learning-container">
+            <div class="learning-hero">
+                <div>
+                    <span class="eyebrow">WINTER TRAVEL EDUCATION</span>
+                    <h2>Learn before you commit to terrain</h2>
+                    <p>This hub is a practical starting point for understanding bulletins, snow, terrain, stability tests and companion rescue. It is not a replacement for an in-person avalanche course, current official BPA, or professional instruction.</p>
                 </div>
-                <div class="emergency-card">
-                    <h3>🏔️ Val d'Aran</h3>
-                    <p class="phone-number">112 / Pompièrs</p>
-                    <p>Pompièrs d'Aran Mountain Rescue</p>
-                </div>
-                <div class="emergency-card">
-                    <h3>🇫🇷 French Pyrenees</h3>
-                    <p class="phone-number">112 / 17</p>
-                    <p>PGHM (Peloton de Gendarmerie de Haute Montagne)</p>
-                </div>
-                <div class="emergency-card">
-                    <h3>🇦🇩 Andorra</h3>
-                    <p class="phone-number">112 / 118</p>
-                    <p>GRM (Grup de Rescat de Muntanya)</p>
-                </div>
+                <div class="learning-warning"><strong>Core idea</strong><br>More information does not make a slope safe. Use it to make better terrain choices and to preserve margins when uncertainty is high.</div>
             </div>
 
-            <h2>Field Safety Checklist (3x3 Filter)</h2>
-            <div class="safety-checklist">
-                <div class="checklist-card">
-                    <h3>1. Red Flag Warnings</h3>
-                    <ul>
-                        <li>Recent natural or human-triggered avalanches</li>
-                        <li>Shooting cracks propagation under skis</li>
-                        <li>Hollow "whumpfing" sounds in the snowpack</li>
-                        <li>Rapid air temperature increase or heavy rain</li>
-                        <li>Recent wind transport creating fresh wind slabs</li>
-                    </ul>
-                </div>
-                <div class="checklist-card">
-                    <h3>2. Essential Companion Equipment</h3>
-                    <ul>
-                        <li><strong>Transceiver:</strong> 3-antenna, worn on body with >80% battery</li>
-                        <li><strong>Probe:</strong> Minimum 240cm aluminum/carbon probe</li>
-                        <li><strong>Shovel:</strong> Metal blade (avoid plastic blades)</li>
-                        <li><strong>Airbag Backpack:</strong> Recommended for slab terrain</li>
-                    </ul>
-                </div>
+            <div class="learning-shell">
+                <nav class="hub-menu" aria-label="Safety learning topics">
+                    <button class="hub-menu-btn active" data-hub-target="hub-start">Start here</button>
+                    <button class="hub-menu-btn" data-hub-target="hub-basics">Avalanche basics</button>
+                    <button class="hub-menu-btn" data-hub-target="hub-snowpack">Snowpack</button>
+                    <button class="hub-menu-btn" data-hub-target="hub-tests">Stability tests</button>
+                    <button class="hub-menu-btn" data-hub-target="hub-terrain">Terrain & decisions</button>
+                    <button class="hub-menu-btn" data-hub-target="hub-forecast">Read the BPA</button>
+                    <button class="hub-menu-btn" data-hub-target="hub-equipment">Equipment</button>
+                    <button class="hub-menu-btn" data-hub-target="hub-rescue">Companion rescue</button>
+                    <button class="hub-menu-btn" data-hub-target="hub-services">Rescue by area</button>
+                    <button class="hub-menu-btn" data-hub-target="hub-resources">Further learning</button>
+                </nav>
+
+                <section class="hub-content">
+                    <article id="hub-start" class="hub-panel active">
+                        <h3>A simple daily process</h3>
+                        <div class="step-grid">
+                            <div class="learning-card"><span class="step-number">1</span><h4>Read the official BPA</h4><p>Note the danger level, elevation bands, aspects, avalanche problems, expected size, likelihood/distribution and whether conditions are rising or falling.</p></div>
+                            <div class="learning-card"><span class="step-number">2</span><h4>Check weather & recent loading</h4><p>New snow, rain, wind transport and rapid warming can change the problem faster than a static number suggests.</p></div>
+                            <div class="learning-card"><span class="step-number">3</span><h4>Choose terrain that fits</h4><p>Build a primary route and a lower-consequence Plan B before leaving. Avoid depending on a single test or a single observation.</p></div>
+                            <div class="learning-card"><span class="step-number">4</span><h4>Reassess continuously</h4><p>Compare what you see with the forecast. Recent avalanches, cracking, whumpfs, rapid loading or warming are reasons to increase your margin.</p></div>
+                        </div>
+                        <div class="callout"><strong>Before entering avalanche terrain:</strong> every person should carry a working transceiver, probe and shovel, know how to use them, and understand the group plan.</div>
+                    </article>
+
+                    <article id="hub-basics" class="hub-panel">
+                        <h3>Avalanche basics</h3>
+                        <div class="learning-columns">
+                            <div class="learning-card"><h4>Slab avalanches</h4><p>A cohesive slab releases on a weak layer or interface and can propagate far beyond the trigger point. Wind slab, storm slab and persistent/deep-persistent slab problems are different expressions of this mechanism.</p></div>
+                            <div class="learning-card"><h4>Loose avalanches</h4><p>Loose snow releases start from a point and fan outward. They can be dry or wet; even a relatively small loose avalanche can be serious above cliffs, gullies or other terrain traps.</p></div>
+                            <div class="learning-card"><h4>Wet-snow problems</h4><p>Rain, sustained warmth or strong solar input can weaken the snowpack. Timing matters: conditions can deteriorate rapidly during the day.</p></div>
+                            <div class="learning-card"><h4>Cornices</h4><p>Cornices can fail farther back than expected and can trigger slabs below. Give corniced ridgelines a generous margin from both above and below.</p></div>
+                        </div>
+                        <h4>Red flags</h4>
+                        <ul class="knowledge-list"><li>Recent natural or human-triggered avalanches</li><li>Shooting cracks around skis, board or boots</li><li>Whumpfing/collapse of a buried weak layer</li><li>Rapid loading from snowfall or wind</li><li>Rain on snow or rapid warming</li></ul>
+                        <p class="resource-row"><a href="https://www.avalanches.org/standards/avalanche-problems/" target="_blank" rel="noopener">EAWS avalanche problems ↗</a><a href="https://avysavvy.avalanche.ca/" target="_blank" rel="noopener">Avalanche Canada Avy Savvy ↗</a></p>
+                    </article>
+
+                    <article id="hub-snowpack" class="hub-panel">
+                        <h3>Snowpack: what you are trying to understand</h3>
+                        <p>A snowpack is a stack of layers produced by storms, wind, temperature gradients, sun, rain and metamorphism. The useful question is not simply “is the snow hard or soft?” but whether a weak layer exists, whether a cohesive slab sits above it, and whether a fracture could initiate and propagate.</p>
+                        <div class="learning-columns">
+                            <div class="learning-card"><h4>New & wind-loaded snow</h4><p>Look for recent storm interfaces, density changes and fresh wind slabs near ridgelines, cross-loaded gullies and lee slopes.</p></div>
+                            <div class="learning-card"><h4>Persistent weak layers</h4><p>Facets, depth hoar and buried surface hoar can remain reactive long after the storm that created them. They often demand larger terrain margins.</p></div>
+                            <div class="learning-card"><h4>Crusts & interfaces</h4><p>Rain or melt-freeze crusts may become sliding surfaces, or promote faceting above/below them. Their effect depends on the surrounding layers.</p></div>
+                            <div class="learning-card"><h4>Spatial variability</h4><p>A pit describes one small place. Wind, aspect, elevation and terrain shape can change the snowpack over very short distances.</p></div>
+                        </div>
+                        <h4>How to read a simple snow profile</h4>
+                        <ol class="knowledge-list"><li>Choose a representative, safe location—not an exposed start zone.</li><li>Identify layer boundaries by hardness/hand resistance and visible grain changes.</li><li>Note grain type and size, moisture, crusts and suspected weak layers.</li><li>Relate each layer to recent weather: storm snow, wind transport, warming, rain or prolonged cold.</li><li>Use stability tests only as one observation alongside the BPA, weather, terrain and red flags.</li></ol>
+                        <div class="callout caution"><strong>Important:</strong> a stable-looking pit or a non-result does not prove surrounding avalanche terrain is safe.</div>
+                    </article>
+
+                    <article id="hub-tests" class="hub-panel">
+                        <h3>Basic snow stability tests</h3>
+                        <p>Tests can help identify a weak layer and how a fracture behaves at one location. They are observations—not green lights.</p>
+                        <div class="learning-columns">
+                            <div class="learning-card"><h4>Compression Test (CT)</h4><p>Useful for identifying layers that fracture under incremental loading and for observing fracture character. It says less about whether a fracture will propagate across a slope.</p></div>
+                            <div class="learning-card"><h4>Extended Column Test (ECT)</h4><p>Designed to add information about fracture propagation across a wider column. Propagating results can be an important warning when the tested layer is representative.</p></div>
+                            <div class="learning-card"><h4>Propagation Saw Test (PST)</h4><p>Often used for persistent weak layers to investigate whether an initiated crack can continue propagating. Interpretation needs training and careful site selection.</p></div>
+                            <div class="learning-card"><h4>Hand shear / quick checks</h4><p>Small informal tests can help compare storm interfaces while travelling, but they sample very little snow and should not be treated as a slope-stability verdict.</p></div>
+                        </div>
+                        <h4>Good test habits</h4>
+                        <ul class="knowledge-list"><li>Test in a safe location with similar elevation/aspect/loading to the terrain of interest.</li><li>Record depth, layer, result and fracture character—not just “passed/failed.”</li><li>Repeat observations through the day if terrain or weather changes.</li><li>Give strong warning signs more weight than reassuring isolated tests.</li></ul>
+                        <p class="resource-row"><a href="https://avysavvy.avalanche.ca/" target="_blank" rel="noopener">Avy Savvy learning modules ↗</a><a href="https://www.avalanches.org/" target="_blank" rel="noopener">European Avalanche Warning Services ↗</a></p>
+                    </article>
+
+                    <article id="hub-terrain" class="hub-panel">
+                        <h3>Terrain & decision making</h3>
+                        <div class="learning-columns">
+                            <div class="learning-card"><h4>Slope angle</h4><p>Most slab avalanche terrain is steep enough to slide. Measure or estimate slope angle, but remember you can trigger connected steeper terrain from flatter ground.</p></div>
+                            <div class="learning-card"><h4>Terrain traps</h4><p>Gullies, creek beds, cliffs, trees and depressions magnify consequences by increasing burial depth or adding trauma.</p></div>
+                            <div class="learning-card"><h4>Runout & overhead hazard</h4><p>You can be exposed while standing on low-angle terrain beneath a start zone. Ask what is above you as well as what is under your skis.</p></div>
+                            <div class="learning-card"><h4>Group management</h4><p>Expose one person at a time where appropriate, regroup in genuinely safe locations, maintain communication and avoid stacking the group in a single hazard zone.</p></div>
+                        </div>
+                        <h4>Decision traps to watch</h4>
+                        <ul class="knowledge-list"><li>Commitment to the original objective after conditions change</li><li>Following tracks or another group as evidence of safety</li><li>Expert halo: letting confidence in one person replace group observation</li><li>Scarcity/summit fever: accepting more exposure because the opportunity feels rare</li><li>Normalisation: “we crossed something like this before”</li></ul>
+                        <div class="callout"><strong>A useful rule:</strong> when uncertainty increases, choose terrain with lower consequences rather than demanding more certainty from imperfect information.</div>
+                    </article>
+
+                    <article id="hub-forecast" class="hub-panel">
+                        <h3>How to read an avalanche bulletin (BPA/BERA)</h3>
+                        <p>The European danger level is regional. It is not a rating for every individual slope. Read the detail behind the number.</p>
+                        <div class="step-grid">
+                            <div class="learning-card"><h4>1. Danger level</h4><p>Use the 1–5 EAWS scale as the regional starting point and note if the level changes by elevation or time of day.</p></div>
+                            <div class="learning-card"><h4>2. Avalanche problems</h4><p>Identify the problem type: new snow, wind slab, persistent weak layer, wet snow or gliding snow, and understand what creates it.</p></div>
+                            <div class="learning-card"><h4>3. Where</h4><p>Check highlighted aspects and elevation bands. Treat boundaries as transitions, not precise lines in the terrain.</p></div>
+                            <div class="learning-card"><h4>4. Likelihood & size</h4><p>Consider how easy triggering may be, how widespread the problem is and the expected avalanche size/consequence.</p></div>
+                            <div class="learning-card"><h4>5. Trend</h4><p>Read expected changes from snowfall, wind, warming, cooling or rain. A morning assessment may not describe the afternoon.</p></div>
+                            <div class="learning-card"><h4>6. Verify in the field</h4><p>Look for evidence that agrees—or conflicts—with the forecast. Unexpected red flags should make you more conservative.</p></div>
+                        </div>
+                        <p class="resource-row"><a href="https://bpa.icgc.cat/" target="_blank" rel="noopener">ICGC Catalonia BPA ↗</a><a href="https://www.aemet.es/es/eltiempo/prediccion/montana/boletin_peligro_aludes" target="_blank" rel="noopener">AEMET Spain ↗</a><a href="https://www.meteo.ad/estatneu" target="_blank" rel="noopener">Meteo.ad Andorra ↗</a><a href="https://meteofrance.com/meteo-montagne/pyrenees" target="_blank" rel="noopener">Météo-France Pyrenees ↗</a></p>
+                    </article>
+
+                    <article id="hub-equipment" class="hub-panel">
+                        <h3>Basic equipment</h3>
+                        <div class="equipment-grid">
+                            <div class="learning-card"><div class="equipment-icon">📡</div><h4>Transceiver</h4><p>Wear it securely, verify transmit/search function and battery before departure, and practise searches regularly.</p></div>
+                            <div class="learning-card"><div class="equipment-icon">📏</div><h4>Probe</h4><p>Carry a proper avalanche probe and know how to deploy it quickly. Probing converts the fine-search signal into a confirmed burial location.</p></div>
+                            <div class="learning-card"><div class="equipment-icon">⛏️</div><h4>Metal shovel</h4><p>Efficient strategic shovelling is usually the longest part of companion rescue. A robust metal blade matters.</p></div>
+                            <div class="learning-card"><div class="equipment-icon">🎒</div><h4>Avalanche airbag</h4><p>An airbag can improve survival odds in some avalanches but does not prevent trauma, burial in terrain traps, or the need for rescue gear and terrain judgement.</p></div>
+                            <div class="learning-card"><div class="equipment-icon">🩹</div><h4>First aid & insulation</h4><p>Carry enough first-aid and insulation to manage trauma, cold and a delayed evacuation.</p></div>
+                            <div class="learning-card"><div class="equipment-icon">📱</div><h4>Communication & navigation</h4><p>Phone, offline map/GPS and backup power help summon rescue and communicate location, but coverage cannot be assumed.</p></div>
+                        </div>
+                        <div class="callout caution"><strong>Equipment is not a permission slip.</strong> Rescue tools reduce consequences after a mistake; terrain selection is what reduces exposure before one.</div>
+                    </article>
+
+                    <article id="hub-rescue" class="hub-panel">
+                        <h3>Companion rescue: the sequence to practise</h3>
+                        <ol class="rescue-steps">
+                            <li><strong>Stop and assess.</strong> Make sure rescuers are not entering continuing avalanche danger.</li>
+                            <li><strong>Identify last-seen point and number missing.</strong> Shout, look for surface clues and account for the group.</li>
+                            <li><strong>Call 112 early when possible.</strong> Give location, number of people, burial status, injuries and access information.</li>
+                            <li><strong>Switch non-searching transceivers to search/off as appropriate.</strong> Begin signal search from the last-seen point or systematic search area.</li>
+                            <li><strong>Coarse then fine search.</strong> Follow the transceiver to the minimum distance reading close to the snow surface.</li>
+                            <li><strong>Probe systematically.</strong> Leave the probe in place when you get a positive strike.</li>
+                            <li><strong>Shovel strategically.</strong> Start downhill from the probe and move snow efficiently as a team.</li>
+                            <li><strong>Airway, breathing, trauma, hypothermia.</strong> Expose the face/airway first, then manage the patient and prepare for evacuation.</li>
+                        </ol>
+                        <div class="callout"><strong>Practise before you need it.</strong> Reading this sequence is not rescue competence. Timed transceiver, probing and shovelling practice should be repeated every season.</div>
+                    </article>
+
+                    <article id="hub-services" class="hub-panel">
+                        <h3>Main rescue contacts across the Pyrenees</h3>
+                        <p><strong>112 works across the European Union</strong> and is the best default when you are unsure which specialist service covers the incident.</p>
+                        <div class="emergency-grid">
+                            <div class="emergency-card"><h4>🇪🇸 Catalonia</h4><p class="phone-number">112</p><p>Emergency coordination dispatches the appropriate mountain-rescue resources, including Bombers de la Generalitat/GRAE where applicable.</p></div>
+                            <div class="emergency-card"><h4>🏔️ Val d'Aran</h4><p class="phone-number">112</p><p>Use 112 for mountain incidents; emergency coordination can activate Pompièrs d'Aran and other required resources.</p></div>
+                            <div class="emergency-card"><h4>🇪🇸 Aragón / Navarra / Spain</h4><p class="phone-number">112</p><p>Regional emergency coordination dispatches Guardia Civil mountain rescue and medical/fire resources as required.</p></div>
+                            <div class="emergency-card"><h4>🇦🇩 Andorra</h4><p class="phone-number">112</p><p>Mountain rescue/emergency coordination. Andorran official emergency contacts also list 118 for firefighters and 116 for medical emergencies.</p></div>
+                            <div class="emergency-card"><h4>🇫🇷 French Pyrenees</h4><p class="phone-number">112</p><p>European emergency number. France also uses 18 for fire/rescue and 17 for police/gendarmerie; mountain rescue is dispatched according to location.</p></div>
+                        </div>
+                        <h4>Information to give rescuers</h4>
+                        <ul class="knowledge-list"><li>Exact coordinates and mountain/route name</li><li>What happened and whether avalanche danger remains</li><li>Number caught, buried, injured and accounted for</li><li>Time of avalanche/burial and transceiver status</li><li>Weather, visibility and safe access/landing information if known</li><li>Your callback number and remaining group resources</li></ul>
+                    </article>
+
+                    <article id="hub-resources" class="hub-panel">
+                        <h3>Further learning & official resources</h3>
+                        <div class="resource-grid">
+                            <a class="resource-card" href="https://avysavvy.avalanche.ca/" target="_blank" rel="noopener"><strong>Avalanche Canada · Avy Savvy</strong><span>Excellent structured introduction to avalanches, terrain, forecasts and companion rescue.</span></a>
+                            <a class="resource-card" href="https://www.avalanches.org/" target="_blank" rel="noopener"><strong>EAWS</strong><span>European danger scale, avalanche problems, standards and warning-service network.</span></a>
+                            <a class="resource-card" href="https://bpa.icgc.cat/" target="_blank" rel="noopener"><strong>ICGC BPA</strong><span>Official Catalan avalanche danger bulletin.</span></a>
+                            <a class="resource-card" href="https://www.aemet.es/es/eltiempo/prediccion/montana/boletin_peligro_aludes" target="_blank" rel="noopener"><strong>AEMET avalanche information</strong><span>Official Spanish mountain avalanche bulletins and supporting information.</span></a>
+                            <a class="resource-card" href="https://www.meteo.ad/estatneu" target="_blank" rel="noopener"><strong>Meteo.ad</strong><span>Official Andorran snow and avalanche bulletin.</span></a>
+                            <a class="resource-card" href="https://meteofrance.com/meteo-montagne/pyrenees" target="_blank" rel="noopener"><strong>Météo-France BERA</strong><span>Official French Pyrenees avalanche-risk bulletins.</span></a>
+                        </div>
+                        <div class="callout caution"><strong>Best next step:</strong> take a recognised field-based avalanche course and practise companion rescue. Online material is preparation and reinforcement, not a substitute for supervised field learning.</div>
+                    </article>
+                </section>
+            </div>
+        </div>
+    </main>
+
+    <main id="page4" class="page-view">
+        <div class="content-container about-container">
+            <section class="about-hero">
+                <span class="eyebrow">ABOUT THE PROJECT</span>
+                <h2>Built by friends who spend winter in the mountains</h2>
+                <p>We are a small group of friends who ski tour and explore the mountains in winter. We started this project because avalanche information in Europe is excellent in many individual regions, but it is fragmented across borders, languages, bulletin formats and websites.</p>
+                <p>Our goal is simple: make it easier to <strong>find and understand the information that already exists</strong>, combine official warnings with clearly labelled community observations, and help people make more informed decisions before and during a day in the mountains.</p>
+            </section>
+            <div class="about-grid">
+                <div class="about-card"><h3>Safer does not mean more accessible</h3><p>We do not want this map to make serious winter terrain look easy or consequence-free. Better information should support better judgement, not lower the threshold for entering terrain beyond someone's skills or experience.</p></div>
+                <div class="about-card"><h3>Official sources come first</h3><p>The regional avalanche service remains the authority. Community reports and model weather are additional context and must never replace the official bulletin, field observations or professional advice.</p></div>
+                <div class="about-card"><h3>Uncertainty should stay visible</h3><p>If a current danger rating is unavailable, the map should say so rather than invent one or silently reuse yesterday's value. The same principle applies to community data: useful does not mean verified.</p></div>
+                <div class="about-card"><h3>A European direction</h3><p>The Pyrenees are the first focus because they cross several warning systems in a compact mountain chain. The architecture is deliberately based on European warning-region standards so the Alps and other European ranges can be added later.</p></div>
+            </div>
+            <div class="about-manifesto">
+                <h3>Why now?</h3>
+                <p>More people are spending time outdoors in winter. That makes good education, transparent uncertainty, cross-border information and rescue awareness increasingly valuable. The project is a citizen initiative—not an avalanche forecasting centre, guiding service, rescue organisation or guarantee of safety.</p>
+                <p><strong>Always check the current official bulletin, carry rescue equipment, train with it, and choose terrain appropriate to the conditions and your group.</strong></p>
             </div>
         </div>
     </main>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="translations.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
