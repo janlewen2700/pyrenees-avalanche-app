@@ -13,13 +13,13 @@ const pool = new Pool({
     ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
 });
 // Database Connection Settings
-const pool = new Pool({
-    user: process.env.DB_USER || 'postgres',
-    host: process.env.DB_HOST || 'localhost',
-    database: process.env.DB_NAME || 'avalanche_db',
-    password: process.env.DB_PASSWORD || 'password',
-    port: process.env.DB_PORT || 5432,
-});
+//const pool = new Pool({
+    //user: process.env.DB_USER || 'postgres',
+    //host: process.env.DB_HOST || 'localhost',
+    //database: process.env.DB_NAME || 'avalanche_db',
+    //password: process.env.DB_PASSWORD || 'password',
+    //port: process.env.DB_PORT || 5432,
+//});
 
 // GET /api/observations: Fetches spatial observations in GeoJSON format
 app.get('/api/observations', async (req, res) => {
