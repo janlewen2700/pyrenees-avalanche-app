@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Avalanche & Weather Safety Network - Pyrenees</title>
+
+    <!-- Leaflet Mapping CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- Application CSS -->
+    <link rel="stylesheet" href="style.css" />
+    <!-- Chart.js for Weather Analysis -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+    <!-- Citizen Initiative Disclaimer Modal -->
+    <div id="disclaimer-modal" class="modal-overlay">
+        <div class="modal-card warning-card">
+            <h2>⚠️ Safety & Liability Warning</h2>
+            <p>This network is a <strong>citizen science initiative</strong> combining official hazard forecasts (ICGC/EAWS) with unverified public field observations.</p>
+            <ul>
+                <li>Information can be incomplete or outdated.</li>
+                <li>Citizen observations are not safety guarantees.</li>
+                <li>Always carry transceiver, probe, and shovel in avalanche terrain.</li>
+            </ul>
+            <button id="accept-disclaimer-btn" class="btn btn-danger">I Understand & Agree</button>
+        </div>
+    </div>
+
+    <!-- Observation Logging Modal -->
+    <div id="log-modal" class="modal-overlay hidden">
+        <div class="modal-card">
+            <span class="close-modal">&times;</span>
+            <h2>Log Field Observation</h2>
+            <form id="observation-form">
+                <input type="hidden" id="form-lat">
+                <input type="hidden" id="form-lng">
+
+                <div class="form-group">
+                    <label>Type of Observation</label>
+                    <select id="form-type" required>
+                        <option value="avalanche">⚠️ Avalanche (Permanent Record)</option>
+                        <option value="snowpack">❄️ Snowpack Observation (Current Season)</option>
+                        <option value="trip_report">🎿 Trip Report (Current Season)</option>
+                        <option value="accident">🚨 Accident Report (Permanent Record)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Slope Aspect & Elevation</label>
+                    <div class="form-row">
+                        <select id="form-aspect">
+                            <option value="N">North (N)</option>
+                            <option value="NE">Northeast (NE)</option>
+                            <option value="E">East (E)</option>
+                            <option value="SE">Southeast (SE)</option>
+                            <option value="S">South (S)</option>
+                            <option value="SW">Southwest (SW)</option>
+                            <option value="W">West (W)</option>
+                            <option value="NW">Northwest (NW)</option>
+                        </select>
+                        <input type="number" id="form-elevation" placeholder="Elevation (m)" min="500" max="3500">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Snowpack Details</label>
+                    <div class="form-row">
+                        <input type="number" id="form-slope" placeholder="Slope Angle (°)" min="0" max="60">
+                        <input type="number" id="form-weak-layer" placeholder="Weak Layer Depth (cm)" min="0" max="300">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Notes & Field Description</label>
+                    <textarea id="form-notes" rows="3" placeholder="Describe snow stability, whumpfing, propagation, or avalanche size..." required></textarea>
+                </div>
+
+                <button type="submit" class="btn btn-primary">Submit Field Report</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Main Navigation Header -->
+    <header class="app-header">
+        <div class="logo">🏔️ Pyrenees Avalanche Network</div>
+        <nav class="nav-tabs">
+            <button class="nav-btn active" data-page="page1">Page 1: Avalanche Hazard</button>
+            <button class="nav-btn" data-page="page2">Page 2: Weather & Snow History</button>
+            <button class="nav-btn" data-page="page3">Page 3: Safety & Rescue Hub</button>
+        </nav>
+    </header>
+
+    <!-- PAGE 1: Avalanche Danger Map & Observations -->
+    <main id="page1" class="page-view active">
+        <div id="map-avalanche" class="map-container"></div>
+        <aside class="map-sidebar">
+            <h3>Layer Controls</h3>
+            <label class="checkbox-label"><input type="checkbox" id="toggle-bulletin" checked> Official Hazard Bulletin (ICGC)</label>
+            <label class="checkbox-label"><input type="checkbox" id="toggle-avalanches" checked> Avalanches (Permanent)</label>
+            <label class="checkbox-label"><input type="checkbox" id="toggle-accidents" checked> Accidents (Permanent)</label>
+            <label class="checkbox-label"><input type="checkbox" id="toggle-reports" checked> Current Season Reports</label>
+            
+            <div class="legend-box">
+                <h4>EAWS Danger Scale</h4>
+                <div class="legend-item"><span class="color-box d1"></span> 1 - Low</div>
+                <div class="legend-item"><span class="color-box d2"></span> 2 - Moderate</div>
+                <div class="legend-item"><span class="color-box d3"></span> 3 - Considerable</div>
+                <div class="legend-item"><span class="color-box d4"></span> 4 - High</div>
+                <div class="legend-item"><span class="color-box d5"></span> 5 - Very High</div>
+                <div class="legend-item"><span class="color-box d0"></span> Gray - Out of Season / Unissued</div>
+            </div>
+            <p class="instruction-text">💡 Click anywhere on the map to log a new observation or avalanche.</p>
+        </aside>
+    </main>
+
+    <!-- PAGE 2: Interactive Weather Forecast & Historical Analysis -->
+    <main id="page2" class="page-view">
+        <div id="map-weather" class="map-container"></div>
+        <aside class="map-sidebar weather-sidebar">
+            <h3>Weather & Snowpack History</h3>
+            <p>Click any mountain location to load 14-day history from Open-Meteo.</p>
+            <div id="weather-details" class="weather-details">
+                <p><em>No location selected. Click on the map.</em></p>
+            </div>
+            <div class="chart-container">
+                <canvas id="weatherChart"></canvas>
+            </div>
+        </aside>
+    </main>
+
+    <!-- PAGE 3: Avalanche Safety, Education & Emergency Hub -->
+    <main id="page3" class="page-view">
+        <div class="content-container">
+            <h2>Emergency Mountain Rescue Numbers</h2>
+            <div class="emergency-grid">
+                <div class="emergency-card">
+                    <h3>🇪🇸 Catalonia & Spain</h3>
+                    <p class="phone-number">112</p>
+                    <p>GRAE (Grup de Recolzament d'Actuacions Especials)</p>
+                </div>
+                <div class="emergency-card">
+                    <h3>🏔️ Val d'Aran</h3>
+                    <p class="phone-number">112 / Pompièrs</p>
+                    <p>Pompièrs d'Aran Mountain Rescue</p>
+                </div>
+                <div class="emergency-card">
+                    <h3>🇫🇷 French Pyrenees</h3>
+                    <p class="phone-number">112 / 17</p>
+                    <p>PGHM (Peloton de Gendarmerie de Haute Montagne)</p>
+                </div>
+                <div class="emergency-card">
+                    <h3>🇦🇩 Andorra</h3>
+                    <p class="phone-number">112 / 118</p>
+                    <p>GRM (Grup de Rescat de Muntanya)</p>
+                </div>
+            </div>
+
+            <h2>Field Safety Checklist (3x3 Filter)</h2>
+            <div class="safety-checklist">
+                <div class="checklist-card">
+                    <h3>1. Red Flag Warnings</h3>
+                    <ul>
+                        <li>Recent natural or human-triggered avalanches</li>
+                        <li>Shooting cracks propagation under skis</li>
+                        <li>Hollow "whumpfing" sounds in the snowpack</li>
+                        <li>Rapid air temperature increase or heavy rain</li>
+                        <li>Recent wind transport creating fresh wind slabs</li>
+                    </ul>
+                </div>
+                <div class="checklist-card">
+                    <h3>2. Essential Companion Equipment</h3>
+                    <ul>
+                        <li><strong>Transceiver:</strong> 3-antenna, worn on body with >80% battery</li>
+                        <li><strong>Probe:</strong> Minimum 240cm aluminum/carbon probe</li>
+                        <li><strong>Shovel:</strong> Metal blade (avoid plastic blades)</li>
+                        <li><strong>Airbag Backpack:</strong> Recommended for slab terrain</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
