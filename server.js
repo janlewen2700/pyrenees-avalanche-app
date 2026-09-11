@@ -8,6 +8,10 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL || 'postgresql://postgres:password@localhost:5432/avalanche_db',
+    ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
+});
 // Database Connection Settings
 const pool = new Pool({
     user: process.env.DB_USER || 'postgres',
