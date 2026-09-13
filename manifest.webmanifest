@@ -1,0 +1,10 @@
+{
+  "name": "Pyrenees Avalanche Network",
+  "short_name": "Pyrenees AVAL",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f8fb",
+  "theme_color": "#f5f8fb",
+  "description": "Official bulletin context, community observations and experimental terrain decision support for the Pyrenees.",
+  "icons": [{"src":"/assets/app-icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
+}

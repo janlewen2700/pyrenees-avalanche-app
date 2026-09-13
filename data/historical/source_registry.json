@@ -1,0 +1,51 @@
+{
+  "catalonia_bdac": {
+    "status": "live_wms",
+    "provider": "ICGC",
+    "url": "https://geoserveis.icgc.cat/geoserver/nivoallaus/wms",
+    "layers": [
+      "zonesallaus",
+      "enquestes",
+      "observacions"
+    ],
+    "role": [
+      "static_extent_validation",
+      "historical_observations"
+    ],
+    "licence": "ICGC geoinformation generally CC BY 4.0; static avalanche-zone map explicitly published CC BY 4.0.",
+    "training_policy": "Use zonesallaus/enquestes/observacions only according to documented public services. Static WMS mask is enabled; dated-event bulk ingestion requires a documented public export."
+  },
+  "france_epa_clpa": {
+    "status": "disabled_pending_permission_or_dataset_specific_open_licence",
+    "provider": "INRAE / OFB / avalanches.fr ecosystem",
+    "url": "https://www.avalanches.fr/",
+    "target_file": "france-clpa-epa.geojson",
+    "role": [
+      "dated_event_inventory",
+      "static_extent_validation"
+    ]
+  },
+  "andorra": {
+    "status": "disabled_for_training_pending_permission_or_dataset_specific_open_licence",
+    "provider": "Govern d'Andorra / IDE Andorra",
+    "url": "https://www.ideandorra.ad/Serveis/wms_allaus/wms",
+    "target_file": "andorra-allaus.geojson",
+    "role": [
+      "static_extent_validation",
+      "historical_inventory"
+    ],
+    "catalog_url": "https://www.cartografia.ad/serveis-ogc",
+    "reuse_note": "Official WMS is documented, but the general legal notice restricts reproduction/republication without prior permission. Do not redistribute a normalized copy until permission or a dataset-specific licence is confirmed.",
+    "terrain_source": "2025 official LiDAR-derived MDT 50 cm download is published by Cartografia d'Andorra."
+  },
+  "spain_other_pyrenees": {
+    "status": "terrain_open_data_available_event_inventory_not_yet_confirmed",
+    "provider": "regional/national public authorities",
+    "url": "https://www.idee.es/",
+    "target_file": "spain-pyrenees-avalanches.geojson",
+    "role": [
+      "regional_validation"
+    ],
+    "terrain_source": "CNIG/IGN PNOA MDT05 5 m; download pages state licence compatible with CC BY 4.0 with attribution."
+  }
+}

@@ -1,11 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
     const $ = id => document.getElementById(id);
     const pyreneesCoords = [42.55, 1.25];
-    const europeBounds = L.latLngBounds([[35, -12], [70, 32]]);
     const charts = {};
-    const weatherLayers = {};
-    let currentWeatherGrid = null;
-    let weatherValueLabels = null;
     let pendingReport = null;
     let selectedWeatherPoint = null;
     let weatherMarker = null;
@@ -14,9 +10,25 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentWeatherHistory = null;
     let lastWeatherPlace = null;
     let lastForecastStatus = null;
-    let lastWeatherGridStatus = null;
     let lastRadarTime = null;
     let localizationRuntimeReady = false;
+    const observationFeatureById = new Map();
+    let pendingPhotos = [];
+    let pendingAutoTerrain = null;
+    let reportSketchMap = null;
+    let reportSketchCrownLayer = null;
+    let reportSketchPathLayer = null;
+    let reportSketchLocationMarker = null;
+    let reportSketchMode = null;
+    const reportSketchPoints = { crown: [], path: [] };
+    let mapBeta = null;
+    let terrainBetaGridLayer = null;
+    let terrainBetaSurfaceLayer = null;
+    let terrainBetaMarker = null;
+    let terrainBetaRequestController = null;
+    let terrainBetaRequestSerial = 0;
+    const historyLayersMain = {};
+    const historyLayersBeta = {};
 
     function getObserverToken() {
         try {
@@ -139,7 +151,7 @@ document.addEventListener('DOMContentLoaded', () => {
         'Back to edit':'Torna alla modifica','Confirm & publish':'Conferma e pubblica','Daily process':'Processo quotidiano','Avalanche basics':'Basi sulle valanghe','Snowpack':'Manto nevoso','Stability tests':'Test di stabilità','Terrain & decisions':'Terreno e decisioni','Reading the bulletin':'Leggere il bollettino','Equipment':'Attrezzatura','Companion rescue':'Autosoccorso','Rescue contacts':'Contatti soccorso','Resources':'Risorse'
       }
     };
-    const LANGUAGE_META = { en:['🇬🇧','English'], ca:['🟨🟥','Català'], es:['🇪🇸','Español'], fr:['🇫🇷','Français'], de:['🇩🇪','Deutsch'], it:['🇮🇹','Italiano'] };
+    const LANGUAGE_META = { en:['🇬🇧','English'], ca:['▰','Català'], es:['🇪🇸','Español'], fr:['🇫🇷','Français'], de:['🇩🇪','Deutsch'], it:['🇮🇹','Italiano'] };
 
 
     const EXTRA_TRANSLATIONS = {
@@ -200,9 +212,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (lastWeatherPlace && selectedWeatherPoint && currentWeatherHistory) renderWeatherDetails(currentWeatherHistory, lastWeatherPlace);
             if (pendingReport && !$('preview-step').classList.contains('hidden')) $('report-preview').innerHTML = previewHtml(pendingReport);
             if (lastForecastStatus) renderForecastStatus(lastForecastStatus);
-            if (lastWeatherGridStatus) renderWeatherGridStatus(lastWeatherGridStatus);
             if (lastRadarTime) $('radar-status').textContent = t('Radar frame: {time}', { time: translatedDateTime(lastRadarTime) });
-            applyWeatherOverlay();
             loadObservations();
         }
     }
@@ -279,12 +289,17 @@ document.addEventListener('DOMContentLoaded', () => {
             if (btn.dataset.page === 'page1') window.setTimeout(() => map1.invalidateSize(), 0);
             if (btn.dataset.page === 'page2') window.setTimeout(() => {
                 map2.invalidateSize();
-                if (!selectedWeatherPoint) map2.fitBounds(europeBounds, { padding: [8, 8] });
+                if (!selectedWeatherPoint) map2.setView(pyreneesCoords, 8);
             }, 0);
+            if (btn.dataset.page === 'page-beta') {
+                $('terrain-disclaimer-modal')?.classList.remove('hidden');
+                window.setTimeout(() => mapBeta?.invalidateSize(), 0);
+            }
         });
     });
 
     $('accept-disclaimer-btn').addEventListener('click', () => $('disclaimer-modal').classList.add('hidden'));
+    $('accept-terrain-disclaimer-btn')?.addEventListener('click', () => $('terrain-disclaimer-modal').classList.add('hidden'));
     document.querySelector('.close-modal').addEventListener('click', closeReportModal);
 
     function closeReportModal() {
@@ -323,7 +338,7 @@ document.addEventListener('DOMContentLoaded', () => {
             weight: 3.0,
             opacity: 0.98,
             fillColor: hasCurrentDanger ? dangerColors[danger] : '#8a949f',
-            fillOpacity: hasCurrentDanger ? 0.62 : 0.48
+            fillOpacity: hasCurrentDanger ? 0.44 : 0.28
         };
     }
 
@@ -353,7 +368,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 const p = feature.properties || {};
                 const provider = bulletinProviders.find(item => item.id === p.provider_id);
                 if (provider) setBulletinProvider({ ...provider, url: p.bulletin_url || provider.url }, `${p.name || p.region_id} → ${provider.label}`);
-                openMobileDrawer('page1');
                 layer.bindPopup(forecastRegionPopup(feature, event.latlng), { maxWidth: 390 }).openPopup(event.latlng);
             });
         }
@@ -388,6 +402,79 @@ document.addEventListener('DOMContentLoaded', () => {
         layers: 'zonesallaus', format: 'image/png', transparent: true, version: '1.1.1', opacity: 0.70,
         attribution: 'ICGC mapped avalanche terrain'
     });
+    const cataloniaHistoricalLayer = L.tileLayer.wms(icgcWmsUrl, {
+        layers: 'zonesallaus,enquestes,observacions', format: 'image/png', transparent: true, version: '1.1.1', opacity: 0.62,
+        attribution: 'ICGC avalanche inventory / historical mapped zones'
+    });
+
+    function historicalGeoJsonLayer(geojson, label) {
+        return L.geoJSON(geojson, {
+            style: () => ({ color: '#7a2d73', weight: 2, opacity: .8, fillColor: '#b25ba8', fillOpacity: .16 }),
+            pointToLayer: (_feature, latlng) => L.circleMarker(latlng, { radius: 4, color: '#7a2d73', weight: 2, fillColor: '#fff', fillOpacity: .9 }),
+            onEachFeature(feature, layer) {
+                const p = feature.properties || {};
+                const title = p.name || p.nom || p.site || p.id || label;
+                layer.bindPopup(`<strong>${escapeHtml(title)}</strong><br><small>${escapeHtml(label)} · historical inventory context, not a current danger forecast.</small>`);
+            }
+        });
+    }
+
+    function syncHistoricalToggle(id, layer, map) {
+        const input = $(id);
+        if (!input || !layer || !map) return;
+        input.disabled = false;
+        if (input.checked && !map.hasLayer(layer)) layer.addTo(map);
+        input.addEventListener('change', event => {
+            if (event.target.checked) layer.addTo(map); else map.removeLayer(layer);
+        });
+    }
+
+    async function loadHistoricalDatasets() {
+        const messages = ['Catalonia: live ICGC inventory'];
+        try {
+            const response = await fetchJson('/api/historical-avalanches');
+
+            // Andorra: prefer streaming the official WMS so the repository does not redistribute the data.
+            let andorraReady = false;
+            try {
+                const config = await fetchJson('/api/andorra-avalanche-wms');
+                const namedLayers = (config.layers || []).map(layer => layer.name).filter(Boolean);
+                if (config.available && config.url && namedLayers.length) {
+                    const options = {
+                        layers: namedLayers.join(','), format: 'image/png', transparent: true, version: '1.1.1', opacity: 0.58,
+                        attribution: 'Govern d\'Andorra · official avalanche WMS'
+                    };
+                    historyLayersMain.andorra = L.tileLayer.wms(config.url, options);
+                    historyLayersBeta.andorra = L.tileLayer.wms(config.url, { ...options, opacity: 0.50 });
+                    syncHistoricalToggle('toggle-history-andorra', historyLayersMain.andorra, map1);
+                    syncHistoricalToggle('toggle-beta-andorra-history', historyLayersBeta.andorra, mapBeta);
+                    messages.push(`Andorra: live official WMS (${namedLayers.length} layer${namedLayers.length === 1 ? '' : 's'})`);
+                    andorraReady = true;
+                }
+            } catch (_error) {
+                // Fall back to a locally installed, licence-cleared normalized import below.
+            }
+
+            for (const key of ['france','andorra','spain']) {
+                if (key === 'andorra' && andorraReady) continue;
+                const item = response.datasets?.[key];
+                if (item?.available && item.geojson) {
+                    historyLayersMain[key] = historicalGeoJsonLayer(item.geojson, item.label || key);
+                    historyLayersBeta[key] = historicalGeoJsonLayer(item.geojson, item.label || key);
+                    syncHistoricalToggle(`toggle-history-${key}`, historyLayersMain[key], map1);
+                    syncHistoricalToggle(`toggle-beta-${key}-history`, historyLayersBeta[key], mapBeta);
+                    messages.push(`${item.label}: ${item.featureCount} features`);
+                } else {
+                    $(`toggle-history-${key}`)?.setAttribute('disabled', 'disabled');
+                    $(`toggle-beta-${key}-history`)?.setAttribute('disabled', 'disabled');
+                    messages.push(`${item?.label || key}: ${key === 'andorra' ? 'official WMS unavailable; import not installed' : 'import not installed'}`);
+                }
+            }
+            if ($('historical-layer-status')) $('historical-layer-status').textContent = messages.join(' · ');
+        } catch (error) {
+            if ($('historical-layer-status')) $('historical-layer-status').textContent = `Historical imports unavailable: ${error.message}`;
+        }
+    }
 
     const observationGroups = {
         avalanche: L.layerGroup().addTo(map1),
@@ -447,20 +534,18 @@ document.addEventListener('DOMContentLoaded', () => {
         const p = feature.properties || {};
         const d = p.details || {};
         const people = d.people || {};
-        const test = d.snowpackTest || {};
         const kind = reportMarkerKind(feature);
         const severity = reportSeverity(feature);
         const buried = Number(people.fullyBuried || 0) + Number(people.partlyBuried || 0);
+        const dateLabel = d.observedAt ? translatedDateTime(d.observedAt) : (p.created_at ? translatedDateTime(p.created_at) : '—');
         return `
             <div class="popup-report-entry">
                 <div><strong>${escapeHtml(d.title || markerLabel(kind) || p.type || t('Field report'))}</strong></div>
                 <span class="pill">${escapeHtml(markerLabel(kind) || p.type || '')}</span>
                 <span class="pill severity-pill severity-${escapeHtml(severity)}">${escapeHtml(severity === 'mortality' ? t('Fatality') : severity === 'incident' ? t('Incident') : t('Information'))}</span>
-                <p>${escapeHtml(d.notes || '')}</p>
-                <small>${escapeHtml(t('Aspect'))} ${escapeHtml(d.aspect || '—')} · ${escapeHtml(t('Elev.'))} ${escapeHtml(d.elevation ?? '—')} m · ${escapeHtml(t('Slope'))} ${escapeHtml(d.slope ?? '—')}°</small><br>
-                ${d.avalancheSize ? `<small>${escapeHtml(t('Avalanche size'))} ${escapeHtml(d.avalancheSize)} · ${escapeHtml(t(d.avalancheCharacter || ''))} · ${escapeHtml(t(d.trigger || ''))}</small><br>` : ''}
-                ${(buried || Number(people.injured || 0) || Number(people.fatalities || 0)) ? `<small><strong>${escapeHtml(t('People:'))}</strong> ${escapeHtml(t('buried'))} ${buried}, ${escapeHtml(t('injured'))} ${escapeHtml(people.injured || 0)}, ${escapeHtml(t('fatalities'))} ${escapeHtml(people.fatalities || 0)}</small><br>` : ''}
-                ${test.type ? `<small><strong>${escapeHtml(t('Snow test:'))}</strong> ${escapeHtml(t(test.type))} · ${escapeHtml(t(test.result || 'result n/a'))} · ${escapeHtml(t(test.fracture || 'fracture n/a'))} · ${escapeHtml(t('down'))} ${escapeHtml(test.failureDepth ?? '—')} cm</small>` : ''}
+                <p class="popup-summary-note">${escapeHtml(d.notes || '')}</p>
+                <small>${escapeHtml(dateLabel)} · ${escapeHtml(t('injured'))} ${escapeHtml(people.injured || 0)} · ${escapeHtml(t('fatalities'))} ${escapeHtml(people.fatalities || 0)}${buried ? ` · ${escapeHtml(t('buried'))} ${buried}` : ''}</small>
+                <div><button class="popup-btn view-report-btn" data-report-id="${escapeHtml(p.id)}" type="button">${escapeHtml(t('View full report'))}</button></div>
                 ${p.can_delete ? `<div><button class="delete-observation popup-delete-btn" data-id="${escapeHtml(p.id)}" type="button">${escapeHtml(t('Delete my report'))}</button></div>` : ''}
             </div>`;
     }
@@ -470,12 +555,31 @@ document.addEventListener('DOMContentLoaded', () => {
         return `<div class="popup-report-list">${heading}${features.map(reportEntryHtml).join('<hr>')}</div>`;
     }
 
+    function addObservationGeometry(feature) {
+        const geometry = feature.properties?.details?.avalancheGeometry;
+        if (!geometry || feature.properties?.type !== 'avalanche') return;
+        if (geometry.path?.type === 'Polygon' && Array.isArray(geometry.path.coordinates?.[0])) {
+            const latlngs = geometry.path.coordinates[0].map(([lng, lat]) => [lat, lng]);
+            L.polygon(latlngs, { color: '#c45a20', weight: 2, fillColor: '#ef7c3b', fillOpacity: .18, bubblingMouseEvents: false })
+                .bindTooltip('Reported avalanche path / extent')
+                .addTo(observationGroups.avalanche);
+        }
+        if (geometry.crown?.type === 'LineString' && Array.isArray(geometry.crown.coordinates)) {
+            const latlngs = geometry.crown.coordinates.map(([lng, lat]) => [lat, lng]);
+            L.polyline(latlngs, { color: '#b4232c', weight: 4, opacity: .92, bubblingMouseEvents: false })
+                .bindTooltip('Reported avalanche crown / release line')
+                .addTo(observationGroups.avalanche);
+        }
+    }
+
     async function loadObservations() {
         Object.values(observationGroups).forEach(group => group.clearLayers());
         try {
             const data = await fetchJson('/api/observations', { headers: { 'X-Observer-Token': observerToken } });
             const grouped = new Map();
+            observationFeatureById.clear();
             (data.features || []).forEach(feature => {
+                observationFeatureById.set(String(feature.properties?.id), feature);
                 const [lng, lat] = feature.geometry.coordinates;
                 const key = `${Number(lat).toFixed(4)},${Number(lng).toFixed(4)}`;
                 if (!grouped.has(key)) grouped.set(key, []);
@@ -483,6 +587,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             grouped.forEach(features => {
+                features.forEach(addObservationGeometry);
                 const [lng, lat] = features[0].geometry.coordinates;
                 const kind = dominantKind(features);
                 const severity = groupSeverity(features);
@@ -503,6 +608,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     bindLayerToggle('toggle-forecast-zones', forecastZones, map1);
     bindLayerToggle('toggle-avalanche-terrain', avalancheTerrain, map1);
+    bindLayerToggle('toggle-history-catalonia', cataloniaHistoricalLayer, map1);
     bindLayerToggle('toggle-avalanches', observationGroups.avalanche, map1);
     bindLayerToggle('toggle-accidents', observationGroups.accident, map1);
     bindLayerToggle('toggle-reports', observationGroups.reports, map1);
@@ -553,17 +659,146 @@ document.addEventListener('DOMContentLoaded', () => {
         setBulletinProvider(bulletinProviders.find(provider => provider.id === event.target.value));
     });
 
+    function clearReportSketchLayers() {
+        if (!reportSketchMap) return;
+        [reportSketchCrownLayer, reportSketchPathLayer, reportSketchLocationMarker].forEach(layer => { if (layer) reportSketchMap.removeLayer(layer); });
+        reportSketchCrownLayer = null;
+        reportSketchPathLayer = null;
+        reportSketchLocationMarker = null;
+    }
+
+    function resetAvalancheSketch() {
+        reportSketchPoints.crown.length = 0;
+        reportSketchPoints.path.length = 0;
+        reportSketchMode = null;
+        if (reportSketchMap) clearReportSketchLayers();
+        document.querySelectorAll('#draw-crown-btn, #draw-path-btn').forEach(button => button.classList.remove('active-draw-tool'));
+        if ($('sketch-status')) $('sketch-status').textContent = 'Select a drawing tool, then tap points on the map. Crown needs at least 2 points; path needs at least 3.';
+    }
+
+    function renderAvalancheSketch() {
+        if (!reportSketchMap) return;
+        if (reportSketchCrownLayer) reportSketchMap.removeLayer(reportSketchCrownLayer);
+        if (reportSketchPathLayer) reportSketchMap.removeLayer(reportSketchPathLayer);
+        reportSketchCrownLayer = reportSketchPoints.crown.length > 1
+            ? L.polyline(reportSketchPoints.crown, { color: '#b4232c', weight: 5, opacity: .95 }).addTo(reportSketchMap)
+            : reportSketchPoints.crown.length === 1 ? L.circleMarker(reportSketchPoints.crown[0], { radius: 5, color: '#b4232c', fillOpacity: 1 }).addTo(reportSketchMap) : null;
+        reportSketchPathLayer = reportSketchPoints.path.length >= 3
+            ? L.polygon(reportSketchPoints.path, { color: '#c45a20', weight: 3, fillColor: '#f28a49', fillOpacity: .24 }).addTo(reportSketchMap)
+            : reportSketchPoints.path.length > 0 ? L.polyline(reportSketchPoints.path, { color: '#c45a20', weight: 3, dashArray: '6 5' }).addTo(reportSketchMap) : null;
+        if ($('sketch-status')) $('sketch-status').textContent = `Crown: ${reportSketchPoints.crown.length} point(s) · path: ${reportSketchPoints.path.length} point(s)${reportSketchMode ? ` · drawing ${reportSketchMode}` : ''}.`;
+    }
+
+    function ensureReportSketchMap(lat, lng) {
+        const container = $('report-avalanche-map');
+        if (!container) return;
+        if (!reportSketchMap) {
+            reportSketchMap = L.map(container, { zoomControl: true, attributionControl: false }).setView([lat, lng], 15);
+            L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom: 17 }).addTo(reportSketchMap);
+            reportSketchMap.on('click', event => {
+                if (!reportSketchMode) {
+                    $('sketch-status').textContent = 'Choose “Draw crown line” or “Draw avalanche path” first.';
+                    return;
+                }
+                reportSketchPoints[reportSketchMode].push(event.latlng);
+                renderAvalancheSketch();
+            });
+        }
+        reportSketchMap.setView([lat, lng], Math.max(reportSketchMap.getZoom(), 15));
+        if (reportSketchLocationMarker) reportSketchMap.removeLayer(reportSketchLocationMarker);
+        reportSketchLocationMarker = L.circleMarker([lat, lng], { radius: 5, color: '#146f9c', weight: 2, fillColor: '#fff', fillOpacity: 1 })
+            .bindTooltip('Report location / release-point reference')
+            .addTo(reportSketchMap);
+        window.setTimeout(() => reportSketchMap.invalidateSize(), 80);
+    }
+
+    function setSketchMode(mode) {
+        reportSketchMode = mode;
+        $('draw-crown-btn')?.classList.toggle('active-draw-tool', mode === 'crown');
+        $('draw-path-btn')?.classList.toggle('active-draw-tool', mode === 'path');
+        renderAvalancheSketch();
+    }
+
+    function serializeAvalancheGeometry() {
+        if (value('form-type') !== 'avalanche') return null;
+        const crownCoordinates = reportSketchPoints.crown.map(point => [Number(point.lng.toFixed(6)), Number(point.lat.toFixed(6))]);
+        const pathCoordinates = reportSketchPoints.path.map(point => [Number(point.lng.toFixed(6)), Number(point.lat.toFixed(6))]);
+        const geometry = {};
+        if (crownCoordinates.length >= 2) geometry.crown = { type: 'LineString', coordinates: crownCoordinates };
+        if (pathCoordinates.length >= 3) {
+            const closed = pathCoordinates.slice();
+            const first = closed[0], last = closed[closed.length - 1];
+            if (first[0] !== last[0] || first[1] !== last[1]) closed.push(first.slice());
+            geometry.path = { type: 'Polygon', coordinates: [closed] };
+        }
+        return Object.keys(geometry).length ? geometry : null;
+    }
+
+    function updateReportTypeUi() {
+        const type = value('form-type');
+        const avalancheFieldsRequired = ['avalanche', 'accident'].includes(type);
+        ['form-avalanche-size', 'form-character', 'form-trigger'].forEach(id => { if ($(id)) $(id).required = avalancheFieldsRequired; });
+        document.querySelectorAll('.avalanche-required-mark').forEach(mark => mark.classList.toggle('hidden', !avalancheFieldsRequired));
+        const showSketch = type === 'avalanche';
+        $('avalanche-sketch-section')?.classList.toggle('hidden', !showSketch);
+        if (showSketch) {
+            const lat = Number(value('form-lat')), lng = Number(value('form-lng'));
+            if (Number.isFinite(lat) && Number.isFinite(lng)) window.setTimeout(() => ensureReportSketchMap(lat, lng), 60);
+        }
+    }
+
+    $('draw-crown-btn')?.addEventListener('click', () => setSketchMode('crown'));
+    $('draw-path-btn')?.addEventListener('click', () => setSketchMode('path'));
+    $('undo-sketch-btn')?.addEventListener('click', () => {
+        if (reportSketchMode && reportSketchPoints[reportSketchMode].length) reportSketchPoints[reportSketchMode].pop();
+        else if (reportSketchPoints.path.length) reportSketchPoints.path.pop();
+        else if (reportSketchPoints.crown.length) reportSketchPoints.crown.pop();
+        renderAvalancheSketch();
+    });
+    $('clear-sketch-btn')?.addEventListener('click', () => { reportSketchPoints.crown.length = 0; reportSketchPoints.path.length = 0; renderAvalancheSketch(); });
+    $('form-type')?.addEventListener('change', updateReportTypeUi);
+
+    function localDateTimeInputValue(date = new Date()) {
+        const shifted = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+        return shifted.toISOString().slice(0, 16);
+    }
+
+    async function autoFillReportTerrain(lat, lng) {
+        pendingAutoTerrain = null;
+        if ($('form-location-summary')) $('form-location-summary').textContent = `${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)} · deriving terrain…`;
+        if ($('auto-terrain-note')) $('auto-terrain-note').innerHTML = '<strong>Deriving elevation, slope and aspect from the mapped point…</strong> You can overwrite the values with a better field measurement.';
+        try {
+            const terrain = await fetchJson(`/api/terrain/point?lat=${Number(lat).toFixed(6)}&lng=${Number(lng).toFixed(6)}`);
+            pendingAutoTerrain = terrain;
+            if (Number.isFinite(Number(terrain.elevationM))) $('form-elevation').value = Math.round(Number(terrain.elevationM));
+            if (Number.isFinite(Number(terrain.slopeDeg))) $('form-slope').value = Number(terrain.slopeDeg).toFixed(1);
+            if (Number.isFinite(Number(terrain.aspectDeg))) {
+                const aspect = compassAspect(Number(terrain.aspectDeg));
+                if ([...$('form-aspect').options].some(option => option.value === aspect)) $('form-aspect').value = aspect;
+            }
+            if ($('form-location-summary')) $('form-location-summary').textContent = `${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)} · ${terrain.sourceLabel || terrain.source || 'terrain model'}`;
+            if ($('auto-terrain-note')) $('auto-terrain-note').innerHTML = `<strong>Terrain auto-filled from ${escapeHtml(terrain.sourceLabel || terrain.source || 'available terrain data')}.</strong> Model resolution: ${escapeHtml(terrain.nominalResolutionM ?? 'unknown')} m. Correct these values if your field measurement is better.`;
+        } catch (error) {
+            if ($('form-location-summary')) $('form-location-summary').textContent = `${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)}`;
+            if ($('auto-terrain-note')) $('auto-terrain-note').innerHTML = `<strong>Automatic terrain lookup was unavailable.</strong> Enter elevation, aspect and slope manually. ${escapeHtml(error.message)}`;
+        }
+    }
+
     function openReportModal(lat, lng) {
         $('form-lat').value = lat;
         $('form-lng').value = lng;
+        if ($('form-observed-at')) $('form-observed-at').value = localDateTimeInputValue();
+        pendingAutoTerrain = null;
+        resetAvalancheSketch();
         $('log-modal').classList.remove('hidden');
         $('form-step').classList.remove('hidden');
         $('preview-step').classList.add('hidden');
+        updateReportTypeUi();
+        autoFillReportTerrain(lat, lng);
     }
 
     map1.on('click', async event => {
         const { lat, lng } = event.latlng;
-        openMobileDrawer('page1');
         let resolved = null;
         try {
             resolved = await fetchJson(`/api/bulletins/resolve?lat=${lat}&lng=${lng}`);
@@ -617,9 +852,16 @@ document.addEventListener('DOMContentLoaded', () => {
     function value(id) { return $(id).value; }
     function numberOrNull(id) { const n = Number(value(id)); return value(id) === '' || !Number.isFinite(n) ? null : n; }
 
-    function currentSeasonYear() {
-        const now = new Date();
+    function currentSeasonYear(value = null) {
+        const now = value ? new Date(value) : new Date();
         return now.getMonth() >= 10 ? now.getFullYear() + 1 : now.getFullYear();
+    }
+
+    function observedAtIso() {
+        const raw = value('form-observed-at');
+        if (!raw) return null;
+        const date = new Date(raw);
+        return Number.isFinite(date.getTime()) ? date.toISOString() : null;
     }
 
     function buildReportPayload() {
@@ -635,6 +877,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const details = {
             reportMode,
             title: value('form-title').trim(),
+            observedAt: observedAtIso(),
+            observationSource: value('form-observation-source'),
+            locationConfidence: value('form-location-confidence'),
+            locationMethod: 'map_click',
+            autoTerrain: pendingAutoTerrain ? { ...pendingAutoTerrain } : null,
             aspect: value('form-aspect'),
             elevation: numberOrNull('form-elevation'),
             slope: numberOrNull('form-slope'),
@@ -645,7 +892,10 @@ document.addEventListener('DOMContentLoaded', () => {
             slabWidth: numberOrNull('form-slab-width'),
             runLength: numberOrNull('form-run-length'),
             people,
-            notes: value('form-notes').trim()
+            notes: value('form-notes').trim(),
+            photos: pendingPhotos.slice(0, 3),
+            snowLayers: collectSnowLayers(),
+            avalancheGeometry: serializeAvalancheGeometry()
         };
         if (reportMode === 'slow') {
             details.snowpack = {
@@ -666,7 +916,7 @@ document.addEventListener('DOMContentLoaded', () => {
             type: value('form-type'),
             lat: Number(value('form-lat')),
             lng: Number(value('form-lng')),
-            season_year: currentSeasonYear(),
+            season_year: currentSeasonYear(details.observedAt),
             details
         };
     }
@@ -680,11 +930,13 @@ document.addEventListener('DOMContentLoaded', () => {
             <h3>${escapeHtml(d.title)}</h3>
             <p><span class="pill">${escapeHtml(t(typeKey))}</span></p>
             <dl class="preview-grid">
-                <dt>${escapeHtml(t('Location'))}</dt><dd>${payload.lat.toFixed(5)}, ${payload.lng.toFixed(5)}</dd>
+                <dt>Observed</dt><dd>${escapeHtml(d.observedAt ? translatedDateTime(d.observedAt) : '—')}</dd>
+                <dt>${escapeHtml(t('Location'))}</dt><dd>${payload.lat.toFixed(5)}, ${payload.lng.toFixed(5)} · ${escapeHtml(d.locationConfidence || '—')}</dd>
                 <dt>${escapeHtml(t('Terrain'))}</dt><dd>${escapeHtml(d.aspect)} · ${escapeHtml(d.elevation ?? '—')} m · ${escapeHtml(d.slope ?? '—')}°</dd>
                 <dt>${escapeHtml(t('Avalanche'))}</dt><dd>${escapeHtml(t('Size'))} ${escapeHtml(d.avalancheSize || '—')} · ${escapeHtml(t(d.avalancheCharacter || '—'))} · ${escapeHtml(t(d.trigger || '—'))}</dd>
                 <dt>${escapeHtml(t('Dimensions'))}</dt><dd>${escapeHtml(d.slabThickness ?? '—')} cm · ${escapeHtml(d.slabWidth ?? '—')} m · ${escapeHtml(d.runLength ?? '—')} m</dd>
                 <dt>${escapeHtml(t('People'))}</dt><dd>${escapeHtml(t('Group'))} ${people.groupSize}; ${escapeHtml(t('fully buried'))} ${people.fullyBuried}; ${escapeHtml(t('partly buried'))} ${people.partlyBuried}; ${escapeHtml(t('caught'))} ${people.caughtNotBuried}; ${escapeHtml(t('injured'))} ${people.injured}; ${escapeHtml(t('fatalities'))} ${people.fatalities}</dd>
+                ${d.avalancheGeometry ? `<dt>Avalanche mapping</dt><dd>${d.avalancheGeometry.crown ? 'Crown line included' : 'No crown line'} · ${d.avalancheGeometry.path ? 'path/extent included' : 'no path polygon'}</dd>` : ''}
                 ${d.reportMode === 'slow' ? `<dt>${escapeHtml(t('Snow test:'))}</dt><dd>${escapeHtml(t(test.type || 'No test'))} · ${escapeHtml(t(test.result || '—'))} · ${escapeHtml(t(test.fracture || '—'))} · ${escapeHtml(t('failure depth'))} ${escapeHtml(test.failureDepth ?? '—')} cm · ${escapeHtml(t(test.crystal || '—'))}</dd>` : ''}
             </dl>
             <p>${escapeHtml(d.notes)}</p>`;
@@ -717,7 +969,12 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             closeReportModal();
             $('observation-form').reset();
-            $('slow-fields').classList.add('hidden-fieldset');
+            pendingPhotos = [];
+            pendingAutoTerrain = null;
+            resetAvalancheSketch();
+            updateReportTypeUi();
+            if ($('photo-preview')) $('photo-preview').innerHTML = '';
+            if ($('snow-layer-editor')) $('snow-layer-editor').innerHTML = '';
             await loadObservations();
             showToast(result.storage === 'postgresql-postgis' ? t('Report published. You can delete it later from its marker popup in this browser.') : t('Report saved to local fallback storage.'));
         } catch (error) {
@@ -731,6 +988,149 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // v4 report UX ---------------------------------------------------------
+    document.querySelectorAll('.mobile-map-menu').forEach(button => {
+        button.addEventListener('click', event => {
+            event.stopPropagation();
+            openMobileDrawer(button.dataset.drawerPage);
+        });
+    });
+
+    function collectSnowLayers() {
+        return [...document.querySelectorAll('.snow-layer-row')].map(row => ({
+            thicknessCm: Number(row.querySelector('.layer-thickness')?.value) || null,
+            grain: row.querySelector('.layer-grain')?.value || '',
+            hardness: row.querySelector('.layer-hardness')?.value || '',
+            weak: Boolean(row.querySelector('.layer-weak')?.checked)
+        })).filter(layer => layer.thicknessCm || layer.grain || layer.hardness || layer.weak);
+    }
+
+    function addSnowLayer(layer = {}) {
+        const editor = $('snow-layer-editor');
+        if (!editor) return;
+        const row = document.createElement('div');
+        row.className = 'snow-layer-row';
+        row.innerHTML = `
+            <label>Thickness (cm)<input class="layer-thickness" type="number" min="1" max="500" value="${escapeHtml(layer.thicknessCm || '')}"></label>
+            <label>Snow / grain<select class="layer-grain"><option value="">Unknown</option><option>New snow</option><option>Rounded grains</option><option>Facets</option><option>Surface hoar</option><option>Depth hoar</option><option>Crust</option><option>Melt forms</option><option>Graupel</option><option>Other</option></select></label>
+            <label>Hardness<select class="layer-hardness"><option value="">Unknown</option><option>Fist</option><option>4 fingers</option><option>1 finger</option><option>Pencil</option><option>Knife</option><option>Ice</option></select></label>
+            <label class="layer-weak-wrap"><input class="layer-weak" type="checkbox"> Unstable layer</label>
+            <button class="layer-remove" type="button" aria-label="Remove layer">×</button>`;
+        if (layer.grain) row.querySelector('.layer-grain').value = layer.grain;
+        if (layer.hardness) row.querySelector('.layer-hardness').value = layer.hardness;
+        row.querySelector('.layer-weak').checked = Boolean(layer.weak);
+        row.querySelector('.layer-remove').addEventListener('click', () => row.remove());
+        editor.appendChild(row);
+    }
+    $('add-snow-layer-btn')?.addEventListener('click', () => addSnowLayer());
+
+    async function resizePhoto(file) {
+        if (!file.type.startsWith('image/')) return null;
+        const dataUrl = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+        const image = await new Promise((resolve, reject) => {
+            const img = new Image(); img.onload = () => resolve(img); img.onerror = reject; img.src = dataUrl;
+        });
+        const maxSide = 1400;
+        const scale = Math.min(1, maxSide / Math.max(image.width, image.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(image.width * scale); canvas.height = Math.round(image.height * scale);
+        canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+        return canvas.toDataURL('image/jpeg', .78);
+    }
+
+    $('form-photos')?.addEventListener('change', async event => {
+        const files = [...event.target.files].slice(0, 3);
+        pendingPhotos = [];
+        $('photo-preview').innerHTML = '<span class="muted">Preparing photos…</span>';
+        try {
+            pendingPhotos = (await Promise.all(files.map(resizePhoto))).filter(Boolean);
+            $('photo-preview').innerHTML = pendingPhotos.map(src => `<img src="${src}" alt="Report photo preview">`).join('');
+        } catch (error) {
+            pendingPhotos = [];
+            $('photo-preview').innerHTML = '';
+            showToast(t('Could not prepare one of the photos.'), true);
+        }
+    });
+
+    function validateReportPayload(payload) {
+        const d = payload.details || {};
+        const missing = [];
+        if (!d.title) missing.push('report title');
+        if (!d.observedAt) missing.push('observation date/time');
+        if (!d.notes) missing.push('field description');
+        if (!d.aspect) missing.push('aspect');
+        if (!Number.isFinite(d.elevation)) missing.push('elevation');
+        if (!Number.isFinite(d.slope)) missing.push('slope angle');
+        if (['avalanche','accident'].includes(payload.type)) {
+            if (!d.avalancheSize) missing.push('avalanche size');
+            if (!d.avalancheCharacter) missing.push('avalanche character');
+            if (!d.trigger) missing.push('trigger');
+        }
+        if (missing.length) return `Please complete the essential fields: ${missing.join(', ')}.`;
+        return '';
+    }
+
+    function snowProfileHtml(layers) {
+        if (!Array.isArray(layers) || !layers.length) return '';
+        const total = layers.reduce((sum, layer) => sum + (Number(layer.thicknessCm) || 0), 0) || layers.length;
+        const blocks = layers.map((layer, index) => {
+            const h = Math.max(7, ((Number(layer.thicknessCm) || total / layers.length) / total) * 100);
+            return `<div class="snow-profile-layer ${layer.weak ? 'is-weak' : ''}" style="height:${h}%" title="${escapeHtml(layer.grain || 'Unknown')} · ${escapeHtml(layer.hardness || 'Unknown')}">${escapeHtml(layer.grain || `Layer ${index + 1}`)}</div>`;
+        }).join('');
+        const legend = layers.map((layer,index) => `<div><strong>${index+1}.</strong> ${escapeHtml(layer.thicknessCm ?? '—')} cm · ${escapeHtml(layer.grain || 'Unknown')} · ${escapeHtml(layer.hardness || 'Unknown')}${layer.weak ? ' · <strong>suspected unstable layer</strong>' : ''}</div>`).join('');
+        return `<div class="report-section"><h4>Snow profile</h4><div class="snow-profile"><div class="snow-profile-column">${blocks}</div><div class="snow-profile-legend">${legend}</div></div></div>`;
+    }
+
+    function fullReportHtml(feature) {
+        const p = feature.properties || {}, d = p.details || {}, people = d.people || {}, snow = d.snowpack || {}, test = d.snowpackTest || {};
+        const photos = Array.isArray(d.photos) ? d.photos : [];
+        const photosHtml = photos.length ? `<div class="report-section"><h4>Photos</h4><div class="report-photo-grid">${photos.map(src => `<a href="${src}" download="field-report-photo.jpg" target="_blank" rel="noopener"><img src="${src}" alt="Field report photo"></a>`).join('')}</div><p class="muted">Open an image to view or save the full resized copy.</p></div>` : '';
+        const avalancheGeometryHtml = d.avalancheGeometry ? `<div class="report-section"><h4>Avalanche mapping</h4><p>${d.avalancheGeometry.crown ? 'A crown / release line was mapped.' : 'No crown line was mapped.'} ${d.avalancheGeometry.path ? 'An approximate avalanche path / affected extent was mapped.' : 'No path polygon was mapped.'} The geometry is displayed with the report on the main avalanche map.</p></div>` : '';
+        return `<div class="report-detail-header"><span class="eyebrow">FIELD OBSERVATION</span><h2>${escapeHtml(d.title || 'Field report')}</h2><div class="report-detail-meta"><span class="pill">${escapeHtml(markerLabel(reportMarkerKind(feature)))}</span><span class="pill">${escapeHtml(d.observedAt ? translatedDateTime(d.observedAt) : (p.created_at ? translatedDateTime(p.created_at) : '—'))}</span></div></div>
+        <div class="report-summary-table">
+          <div class="k">Observed</div><div class="v">${escapeHtml(d.observedAt ? translatedDateTime(d.observedAt) : '—')}</div>
+          <div class="k">Location</div><div class="v">${feature.geometry.coordinates[1].toFixed(5)}, ${feature.geometry.coordinates[0].toFixed(5)} · ${escapeHtml(d.locationConfidence || '—')}</div>
+          <div class="k">Observation source</div><div class="v">${escapeHtml(d.observationSource || '—')}</div>
+          <div class="k">Terrain</div><div class="v">${escapeHtml(d.aspect || '—')} · ${escapeHtml(d.elevation ?? '—')} m · ${escapeHtml(d.slope ?? '—')}°</div>
+          <div class="k">Avalanche</div><div class="v">Size ${escapeHtml(d.avalancheSize || '—')} · ${escapeHtml(d.avalancheCharacter || '—')} · ${escapeHtml(d.trigger || '—')}</div>
+          <div class="k">Crown dimensions</div><div class="v">Depth ${escapeHtml(d.slabThickness ?? '—')} cm · width ${escapeHtml(d.slabWidth ?? '—')} m · run ${escapeHtml(d.runLength ?? '—')} m</div>
+          <div class="k">People</div><div class="v">Group ${escapeHtml(people.groupSize ?? 0)} · fully buried ${escapeHtml(people.fullyBuried ?? 0)} · partly buried ${escapeHtml(people.partlyBuried ?? 0)} · injured ${escapeHtml(people.injured ?? 0)} · fatalities ${escapeHtml(people.fatalities ?? 0)}</div>
+          <div class="k">Snowpack</div><div class="v">Depth ${escapeHtml(snow.depth ?? '—')} cm · weak layer depth ${escapeHtml(snow.weakLayerDepth ?? '—')} cm · whumpf ${escapeHtml(snow.whumpfing || '—')} · cracking ${escapeHtml(snow.cracking || '—')}</div>
+          <div class="k">Stability test</div><div class="v">${escapeHtml(test.type || '—')} · ${escapeHtml(test.result || '—')} · ${escapeHtml(test.fracture || '—')} · failure ${escapeHtml(test.failureDepth ?? '—')} cm · ${escapeHtml(test.crystal || '—')}</div>
+        </div>
+        <div class="report-section"><h4>Field description</h4><p>${escapeHtml(d.notes || '—').replaceAll('\n','<br>')}</p></div>
+        ${avalancheGeometryHtml}${snowProfileHtml(d.snowLayers)}${photosHtml}`;
+    }
+
+    function openFullReport(id) {
+        const feature = observationFeatureById.get(String(id));
+        if (!feature) return;
+        $('report-detail-content').innerHTML = fullReportHtml(feature);
+        $('report-detail-modal').classList.remove('hidden');
+    }
+    $('close-report-detail')?.addEventListener('click', () => $('report-detail-modal').classList.add('hidden'));
+    $('report-detail-modal')?.addEventListener('click', event => { if (event.target === $('report-detail-modal')) $('report-detail-modal').classList.add('hidden'); });
+    $('map-avalanche').addEventListener('click', event => {
+        const viewButton = event.target.closest('.view-report-btn');
+        if (viewButton) openFullReport(viewButton.dataset.reportId);
+    });
+
+    // replace minimal HTML required-validation with avalanche-aware validation.
+    const reportForm = $('observation-form');
+    reportForm?.addEventListener('submit', event => {
+        const payload = buildReportPayload();
+        const validationMessage = validateReportPayload(payload);
+        if (!validationMessage) return;
+        event.preventDefault(); event.stopImmediatePropagation();
+        $('submit-error').textContent = validationMessage;
+        $('submit-error').classList.remove('hidden');
+    }, true);
+
     loadObservations();
     updateStorageStatus();
     prepareStaticTranslations();
@@ -738,14 +1138,127 @@ document.addEventListener('DOMContentLoaded', () => {
     loadForecastRegions();
     window.setInterval(loadForecastRegions, 15 * 60 * 1000);
 
+    // TERRAIN BETA ----------------------------------------------------------
+    mapBeta = L.map('map-terrain-beta').setView(pyreneesCoords, 9);
+    L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+        maxZoom: 17,
+        attribution: '&copy; OpenTopoMap contributors'
+    }).addTo(mapBeta);
+    terrainBetaGridLayer = L.layerGroup().addTo(mapBeta);
+    const betaIcgcHistoryLayer = L.tileLayer.wms(icgcWmsUrl, {
+        layers: 'zonesallaus,enquestes,observacions',
+        format: 'image/png', transparent: true, version: '1.1.1', opacity: .58,
+        attribution: 'ICGC avalanche inventory / mapped zones'
+    });
+    $('toggle-beta-icgc-history')?.addEventListener('change', event => {
+        if (event.target.checked) betaIcgcHistoryLayer.addTo(mapBeta); else mapBeta.removeLayer(betaIcgcHistoryLayer);
+    });
+    // Load licence-compatible local historical imports for France, Andorra and the Spanish Pyrenees.
+    loadHistoricalDatasets();
+
+    function terrainAdvisoryColor(score) {
+        const value = Number(score) || 0;
+        if (value < .25) return '#5aa85f';
+        if (value < .45) return '#d9c73d';
+        if (value < .65) return '#e98a2f';
+        if (value < .82) return '#cf4238';
+        return '#721b27';
+    }
+
+    function compassAspect(deg) {
+        if (!Number.isFinite(Number(deg))) return 'flat / undefined';
+        const labels = ['N','NE','E','SE','S','SW','W','NW'];
+        return labels[Math.round(Number(deg) / 45) % 8];
+    }
+
+    function renderTerrainBetaStatus(data) {
+        const b = data.bulletin || {};
+        const w = data.weather || {};
+        const danger = b.dangerLevel ? `EAWS ${escapeHtml(b.dangerLevel)} / 5` : 'No current machine-readable rating';
+        $('terrain-beta-status').innerHTML = `
+            <div class="terrain-status-grid">
+                <div><span>Official region</span><strong>${escapeHtml(b.regionName || 'Unknown')}</strong></div>
+                <div><span>Official danger</span><strong>${escapeHtml(danger)}</strong></div>
+                <div><span>Snow · 72 h</span><strong>${escapeHtml(w.snow72Cm ?? '—')} cm</strong></div>
+                <div><span>Rain · 24 h</span><strong>${escapeHtml(w.rain24Mm ?? '—')} mm</strong></div>
+                <div><span>Max wind · 24 h</span><strong>${escapeHtml(w.maxWind24Kmh ?? '—')} km/h</strong></div>
+                <div><span>Dominant wind</span><strong>${escapeHtml(w.dominantWindDirectionDeg ?? '—')}°</strong></div>
+                <div><span>Terrain source</span><strong>${escapeHtml(data.dem?.sourceLabel || data.dem?.source || '—')}</strong></div>
+                <div><span>Terrain sample</span><strong>${escapeHtml(data.dem?.effectiveSampleSpacingM ?? data.dem?.nominalResolutionM ?? '—')} m</strong></div>
+            </div>
+            <p class="terrain-model-note"><strong>How to read this:</strong> the color is the greater of (a) the official regional caution floor and (b) the local terrain/weather proxy. A flat cell may have low local release susceptibility but will not be presented as safer than the official regional context.</p>`;
+    }
+
+    function renderTerrainCells(data) {
+        terrainBetaGridLayer.clearLayers();
+        if (terrainBetaSurfaceLayer) { mapBeta.removeLayer(terrainBetaSurfaceLayer); terrainBetaSurfaceLayer = null; }
+        const cells = data.cells || [];
+        const n = Number(data.gridSize) || Math.round(Math.sqrt(cells.length));
+        if (!cells.length || !n) return;
+
+        // Paint a continuous-looking surface from the regular analysis grid.
+        // The underlying values remain cell-based; bilinear interpolation is visual only.
+        const canvas = document.createElement('canvas');
+        const size = 640; canvas.width = size; canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        const image = ctx.createImageData(size, size);
+        const rgb = hex => { const h=hex.replace('#',''); return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)]; };
+        const colorStops = [[0,[90,168,95]],[.25,[90,168,95]],[.45,[217,199,61]],[.65,[233,138,47]],[.82,[207,66,56]],[1,[114,27,39]]];
+        const scoreAt = (r,c) => Number(cells[Math.max(0,Math.min(n-1,r))*n + Math.max(0,Math.min(n-1,c))]?.advisoryScore)||0;
+        const colorAt = v => {
+            for (let i=1;i<colorStops.length;i++) {
+                if (v<=colorStops[i][0]) { const [a,ca]=colorStops[i-1], [b,cb]=colorStops[i]; const t=(v-a)/Math.max(.0001,b-a); return ca.map((x,j)=>Math.round(x+(cb[j]-x)*t)); }
+            } return colorStops.at(-1)[1];
+        };
+        for (let y=0;y<size;y++) {
+            const gy=(1-y/(size-1))*(n-1), r0=Math.floor(gy), r1=Math.min(n-1,r0+1), ty=gy-r0;
+            for (let x=0;x<size;x++) {
+                const gx=x/(size-1)*(n-1), c0=Math.floor(gx), c1=Math.min(n-1,c0+1), tx=gx-c0;
+                const a=scoreAt(r0,c0)*(1-tx)+scoreAt(r0,c1)*tx;
+                const b=scoreAt(r1,c0)*(1-tx)+scoreAt(r1,c1)*tx;
+                const [rr,gg,bb]=colorAt(a*(1-ty)+b*ty); const i=(y*size+x)*4;
+                image.data[i]=rr; image.data[i+1]=gg; image.data[i+2]=bb; image.data[i+3]=168;
+            }
+        }
+        ctx.putImageData(image,0,0);
+        const halfLat=Math.abs(Number(data.cellStep?.lat)||0)/2, halfLng=Math.abs(Number(data.cellStep?.lng)||0)/2;
+        const lats=cells.map(c=>c.lat), lngs=cells.map(c=>c.lng);
+        const bounds=[[Math.min(...lats)-halfLat,Math.min(...lngs)-halfLng],[Math.max(...lats)+halfLat,Math.max(...lngs)+halfLng]];
+        terrainBetaSurfaceLayer=L.imageOverlay(canvas.toDataURL('image/png'), bounds, {opacity:.82, interactive:false, className:'terrain-smooth-surface'}).addTo(mapBeta);
+    }
+
+    async function analyzeTerrainAt(lat, lng) {
+        const radiusKm = Number($('terrain-radius')?.value) || 10;
+        const serial = ++terrainBetaRequestSerial;
+        if (terrainBetaRequestController) terrainBetaRequestController.abort();
+        terrainBetaRequestController = new AbortController();
+        $('terrain-beta-status').innerHTML = '<p><strong>Updating terrain layer…</strong><br><span class="muted">Loading route-scale topography first; weather and bulletin context are added to the same surface.</span></p>';
+        if (terrainBetaMarker) mapBeta.removeLayer(terrainBetaMarker);
+        terrainBetaMarker = L.circleMarker([lat, lng], { radius: 6, color: '#17384a', weight: 2, fillColor: '#fff', fillOpacity: 1 }).addTo(mapBeta);
+        try {
+            const response = await fetch(`/api/terrain/analyze?lat=${lat.toFixed(6)}&lng=${lng.toFixed(6)}&radiusKm=${radiusKm}&grid=41`, {signal:terrainBetaRequestController.signal});
+            const data = await response.json().catch(()=>({}));
+            if (!response.ok) throw new Error(data.details || data.error || `HTTP ${response.status}`);
+            if (serial !== terrainBetaRequestSerial) return;
+            renderTerrainCells(data); renderTerrainBetaStatus(data);
+            const cellLat=Math.abs(Number(data.cellStep?.lat)||0), cellLng=Math.abs(Number(data.cellStep?.lng)||0);
+            const lats=data.cells.map(c=>c.lat), lngs=data.cells.map(c=>c.lng);
+            if (lats.length) mapBeta.fitBounds([[Math.min(...lats)-cellLat,Math.min(...lngs)-cellLng],[Math.max(...lats)+cellLat,Math.max(...lngs)+cellLng]], {padding:[20,20]});
+        } catch (error) {
+            if (error.name === 'AbortError') return;
+            if (serial !== terrainBetaRequestSerial) return;
+            $('terrain-beta-status').innerHTML = `<div class="terrain-critical-warning"><strong>Could not build the terrain layer.</strong><br>${escapeHtml(error.message)}</div>`;
+        }
+    }
+
+    mapBeta.on('click', event => analyzeTerrainAt(event.latlng.lat, event.latlng.lng));
+    $('analyze-terrain-centre')?.addEventListener('click', () => {
+        const centre = mapBeta.getCenter();
+        analyzeTerrainAt(centre.lat, centre.lng);
+    });
+
     // PAGE 2 ---------------------------------------------------------------
-    const map2 = L.map('map-weather').setView([50, 10], 4);
-    map2.createPane('weatherSurfacePane');
-    map2.getPane('weatherSurfacePane').style.zIndex = 410;
-    map2.getPane('weatherSurfacePane').style.pointerEvents = 'none';
-    map2.createPane('weatherLabelPane');
-    map2.getPane('weatherLabelPane').style.zIndex = 470;
-    map2.getPane('weatherLabelPane').style.pointerEvents = 'none';
+    const map2 = L.map('map-weather').setView(pyreneesCoords, 8);
     map2.createPane('radarPane');
     map2.getPane('radarPane').style.zIndex = 450;
     map2.getPane('radarPane').style.pointerEvents = 'none';
@@ -755,12 +1268,10 @@ document.addEventListener('DOMContentLoaded', () => {
         opacity: 0.80,
         attribution: '&copy; OpenTopoMap contributors'
     }).addTo(map2);
-    weatherValueLabels = L.layerGroup().addTo(map2);
 
     function updateBaseMapContrast() {
-        const overlay = document.querySelector('input[name="weather-overlay"]:checked')?.value || 'none';
         const radarOn = $('toggle-radar').checked && radarLayer && map2.hasLayer(radarLayer);
-        weatherBaseLayer.setOpacity(overlay === 'none' && !radarOn ? 0.82 : 0.20);
+        weatherBaseLayer.setOpacity(radarOn ? 0.28 : 0.82);
     }
 
     async function loadRadar() {
@@ -787,205 +1298,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    const WEATHER_SCALES = {
-        temperature: {
-            key: 'temperature', unit: '°C', decimals: 0,
-            stops: [[-25, '#2b2c7c'], [-12, '#315bff'], [0, '#42c8ff'], [10, '#f3ef9b'], [20, '#ffb14e'], [30, '#ef5b35'], [40, '#a71928']],
-            alpha: 0.78
-        },
-        gust: {
-            key: 'windGust', unit: 'km/h', decimals: 0,
-            stops: [[0, '#eef7ff'], [20, '#8adcf8'], [40, '#42a5d8'], [60, '#f1d55b'], [90, '#f0833a'], [120, '#c83737'], [160, '#6e1f5f']],
-            alpha: 0.78
-        },
-        precipitation: {
-            key: 'precipitation', unit: 'mm', decimals: 1,
-            stops: [[0, '#dff7ff'], [0.2, '#9fe3ff'], [0.5, '#58b8ff'], [1, '#397ee8'], [3, '#5551c8'], [6, '#8e3bb4'], [10, '#d12d88']],
-            alpha: 0.84
-        }
-    };
-
-    function hexToRgb(hex) {
-        const value = String(hex).replace('#', '');
-        const full = value.length === 3 ? value.split('').map(char => char + char).join('') : value;
-        return [parseInt(full.slice(0, 2), 16), parseInt(full.slice(2, 4), 16), parseInt(full.slice(4, 6), 16)];
-    }
-
-    function colorForWeatherValue(type, value) {
-        const scale = WEATHER_SCALES[type];
-        if (!scale || !Number.isFinite(value)) return 'rgba(0,0,0,0)';
-        if (type === 'precipitation' && value <= 0.02) return 'rgba(0,0,0,0)';
-        const stops = scale.stops;
-        let lower = stops[0], upper = stops.at(-1);
-        for (let i = 0; i < stops.length - 1; i += 1) {
-            if (value >= stops[i][0] && value <= stops[i + 1][0]) { lower = stops[i]; upper = stops[i + 1]; break; }
-        }
-        if (value <= stops[0][0]) lower = upper = stops[0];
-        if (value >= stops.at(-1)[0]) lower = upper = stops.at(-1);
-        const ratio = upper[0] === lower[0] ? 0 : (value - lower[0]) / (upper[0] - lower[0]);
-        const a = hexToRgb(lower[1]), b = hexToRgb(upper[1]);
-        const rgb = a.map((channel, index) => Math.round(channel + (b[index] - channel) * ratio));
-        let alpha = scale.alpha;
-        if (type === 'gust' && value < 15) alpha = 0.52;
-        if (type === 'precipitation' && value < 0.2) alpha = 0.52;
-        return `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha})`;
-    }
-
-    function prepareWeatherGrid(data, type) {
-        const scale = WEATHER_SCALES[type];
-        const points = (data.points || []).filter(point => Number.isFinite(point[scale.key]));
-        const lats = [...new Set(points.map(point => Number(point.lat)))].sort((a, b) => a - b);
-        const lngs = [...new Set(points.map(point => Number(point.lng)))].sort((a, b) => a - b);
-        const lookup = new Map(points.map(point => [`${Number(point.lat).toFixed(4)},${Number(point.lng).toFixed(4)}`, Number(point[scale.key]) ]));
-        return { type, points, lats, lngs, lookup, step: Number(data.resolutionDegrees) || 2 };
-    }
-
-    function interpolatedGridValue(grid, lat, lng) {
-        if (!grid?.lats?.length || !grid?.lngs?.length) return null;
-        const south = grid.lats[0], north = grid.lats.at(-1), west = grid.lngs[0], east = grid.lngs.at(-1);
-        if (lat < south || lat > north || lng < west || lng > east) return null;
-        const step = grid.step;
-        const latPos = (lat - south) / step;
-        const lngPos = (lng - west) / step;
-        const i0 = Math.max(0, Math.min(grid.lats.length - 1, Math.floor(latPos)));
-        const j0 = Math.max(0, Math.min(grid.lngs.length - 1, Math.floor(lngPos)));
-        const i1 = Math.min(grid.lats.length - 1, i0 + 1);
-        const j1 = Math.min(grid.lngs.length - 1, j0 + 1);
-        const lat0 = grid.lats[i0], lat1 = grid.lats[i1], lng0 = grid.lngs[j0], lng1 = grid.lngs[j1];
-        const key = (a, b) => `${Number(a).toFixed(4)},${Number(b).toFixed(4)}`;
-        const q00 = grid.lookup.get(key(lat0, lng0));
-        const q10 = grid.lookup.get(key(lat1, lng0));
-        const q01 = grid.lookup.get(key(lat0, lng1));
-        const q11 = grid.lookup.get(key(lat1, lng1));
-        const available = [q00, q10, q01, q11].filter(Number.isFinite);
-        if (!available.length) return null;
-        if (![q00, q10, q01, q11].every(Number.isFinite) || lat1 === lat0 || lng1 === lng0) {
-            return available.reduce((sum, value) => sum + value, 0) / available.length;
-        }
-        const ty = (lat - lat0) / (lat1 - lat0);
-        const tx = (lng - lng0) / (lng1 - lng0);
-        const westValue = q00 * (1 - ty) + q10 * ty;
-        const eastValue = q01 * (1 - ty) + q11 * ty;
-        return westValue * (1 - tx) + eastValue * tx;
-    }
-
-    function makeWeatherSurfaceLayer(data, type) {
-        const grid = prepareWeatherGrid(data, type);
-        const WeatherGridLayer = L.GridLayer.extend({
-            createTile(coords) {
-                const tile = L.DomUtil.create('canvas', 'leaflet-tile weather-surface-tile');
-                const size = this.getTileSize();
-                tile.width = size.x;
-                tile.height = size.y;
-                const ctx = tile.getContext('2d');
-                const pixelBlock = 4;
-                const origin = L.point(coords.x * size.x, coords.y * size.y);
-                for (let y = 0; y < size.y; y += pixelBlock) {
-                    for (let x = 0; x < size.x; x += pixelBlock) {
-                        const latlng = this._map.unproject(origin.add([x + pixelBlock / 2, y + pixelBlock / 2]), coords.z);
-                        const value = interpolatedGridValue(grid, latlng.lat, latlng.lng);
-                        if (!Number.isFinite(value)) continue;
-                        ctx.fillStyle = colorForWeatherValue(type, value);
-                        ctx.fillRect(x, y, pixelBlock, pixelBlock);
-                    }
-                }
-                return tile;
-            }
-        });
-        const layer = new WeatherGridLayer({ pane: 'weatherSurfacePane', tileSize: 256, updateWhenZooming: false, keepBuffer: 2 });
-        layer.weatherGrid = grid;
-        return layer;
-    }
-
-    function formatWeatherLabel(type, value) {
-        if (!Number.isFinite(value)) return '';
-        if (type === 'temperature') return `${Math.round(value)}°`;
-        if (type === 'gust') return `${Math.round(value)}<small> km/h</small>`;
-        if (type === 'precipitation') return `${value < 1 ? value.toFixed(1) : value.toFixed(0)}<small> mm</small>`;
-        return String(value);
-    }
-
-    function renderWeatherValueLabels() {
-        if (!weatherValueLabels) return;
-        weatherValueLabels.clearLayers();
-        const type = document.querySelector('input[name="weather-overlay"]:checked')?.value || 'none';
-        if (type === 'none' || !currentWeatherGrid) return;
-        const scale = WEATHER_SCALES[type];
-        const bounds = map2.getBounds().pad(0.08);
-        const zoom = map2.getZoom();
-        const stride = zoom <= 4 ? 2 : 1;
-        (currentWeatherGrid.points || []).forEach((point, index) => {
-            if (index % stride !== 0 || !bounds.contains([point.lat, point.lng])) return;
-            const value = Number(point[scale.key]);
-            if (!Number.isFinite(value)) return;
-            if (type === 'precipitation' && value <= 0.02) return;
-            const icon = L.divIcon({
-                className: 'weather-value-icon',
-                html: `<span>${formatWeatherLabel(type, value)}</span>`,
-                iconSize: [58, 22],
-                iconAnchor: [29, 11]
-            });
-            L.marker([point.lat, point.lng], { icon, interactive: false, pane: 'weatherLabelPane' }).addTo(weatherValueLabels);
-        });
-    }
-
-    function weatherLegendHtml(type) {
-        if (type === 'temperature') return '<div class="legend-gradient temp-gradient"></div><div class="legend-range"><span>−25°C</span><span>10°C</span><span>40°C+</span></div>';
-        if (type === 'gust') return '<div class="legend-gradient gust-gradient"></div><div class="legend-range"><span>0</span><span>60</span><span>160+ km/h</span></div>';
-        if (type === 'precipitation') return `<div class="legend-gradient precip-gradient"></div><div class="legend-range"><span>${escapeHtml(t('dry'))}</span><span>3</span><span>10+ mm</span></div>`;
-        return `<span class="status-note">${escapeHtml(t('Model overlay off.'))}</span>`;
-    }
-
-    function applyWeatherOverlay() {
-        Object.values(weatherLayers).forEach(layer => {
-            if (layer && map2.hasLayer(layer)) map2.removeLayer(layer);
-        });
-        const type = document.querySelector('input[name="weather-overlay"]:checked')?.value || 'none';
-        if (type !== 'none' && weatherLayers[type]) weatherLayers[type].addTo(map2);
-        $('weather-overlay-legend').innerHTML = weatherLegendHtml(type);
-        renderWeatherValueLabels();
-        updateBaseMapContrast();
-    }
-
-    function renderWeatherGridStatus(status) {
-        if (!status) return;
-        if (status.error) {
-            $('weather-overlay-status').textContent = t('Current weather overlay unavailable: {error}', { error: status.error });
-            return;
-        }
-        $('weather-overlay-status').textContent = t('Interpolated current model surface from {count} Open-Meteo samples · {resolution}° grid · updated {time}. Values are model samples, not weather stations.', {
-            count: status.count,
-            resolution: status.resolution,
-            time: translatedDateTime(status.generatedAt)
-        });
-    }
-
-    async function loadCurrentWeatherGrid() {
-        try {
-            const data = await fetchJson('/api/weather/current-grid');
-            currentWeatherGrid = data;
-            weatherLayers.temperature = makeWeatherSurfaceLayer(data, 'temperature');
-            weatherLayers.gust = makeWeatherSurfaceLayer(data, 'gust');
-            weatherLayers.precipitation = makeWeatherSurfaceLayer(data, 'precipitation');
-            lastWeatherGridStatus = { count: data.points?.length || 0, resolution: data.resolutionDegrees, generatedAt: data.generatedAt };
-            renderWeatherGridStatus(lastWeatherGridStatus);
-            applyWeatherOverlay();
-        } catch (error) {
-            lastWeatherGridStatus = { error: error.message };
-            renderWeatherGridStatus(lastWeatherGridStatus);
-        }
-    }
-
     $('toggle-radar').addEventListener('change', event => {
         if (radarLayer) {
             if (event.target.checked) radarLayer.addTo(map2); else map2.removeLayer(radarLayer);
         }
         updateBaseMapContrast();
     });
-    document.querySelectorAll('input[name="weather-overlay"]').forEach(input => input.addEventListener('change', applyWeatherOverlay));
-    map2.on('moveend zoomend', renderWeatherValueLabels);
-
-    loadCurrentWeatherGrid();
+    // Live model surfaces are intentionally disabled in v4.2; radar remains the only map overlay.
     loadRadar();
     localizationRuntimeReady = true;
 
@@ -1093,7 +1412,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     map2.on('click', event => {
-        openMobileDrawer('page2');
         selectedWeatherPoint = { lat: Number(event.latlng.lat.toFixed(5)), lng: Number(event.latlng.lng.toFixed(5)) };
         if (weatherMarker) map2.removeLayer(weatherMarker);
         weatherMarker = L.marker(event.latlng).addTo(map2);

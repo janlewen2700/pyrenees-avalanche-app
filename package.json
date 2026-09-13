@@ -1,11 +1,11 @@
 {
   "name": "pyrenees-avalanche-app",
-  "version": "3.2.0",
-  "description": "Cross-border Pyrenees avalanche safety network with mobile UI, full operational localization, community observations and official bulletin integration",
+  "version": "4.3.0",
+  "description": "Cross-border Pyrenees avalanche safety network with normalized reporting, radar, high-resolution terrain beta, historical avalanche overlays and an ML research pipeline",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js && node --check app.js && node --check translations.js"
+    "check": "node --check server.js && node --check app.js && node --check translations.js && node --check hazard-model.js"
   },
   "engines": {
     "node": ">=18"
@@ -13,6 +13,7 @@
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.19.2",
-    "pg": "^8.11.5"
+    "pg": "^8.11.5",
+    "fast-xml-parser": "^5.2.5"
   }
 }

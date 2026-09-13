@@ -259,3 +259,187 @@ button, input, select, textarea { font: inherit; }
     .hub-menu { position:static; display:flex; flex-direction:row; overflow-x:auto; margin-bottom:12px; }
     .hub-menu-btn { flex:0 0 auto; }
 }
+
+/* v4 professional light interface ------------------------------------------------ */
+:root {
+    --bg-dark: #f4f7f9;
+    --card-bg: rgba(255,255,255,.96);
+    --card-bg-2: #f7fafc;
+    --text-light: #17222e;
+    --text-muted: #667789;
+    --accent-blue: #146f9c;
+    --accent-red: #b23a3a;
+    --border-color: #d7e0e6;
+}
+html, body { background:#eef3f6; color:var(--text-light); }
+body::before {
+    content:""; position:fixed; inset:0; pointer-events:none; z-index:-2;
+    background:
+      linear-gradient(rgba(246,249,251,.91),rgba(246,249,251,.91)),
+      url('https://images.unsplash.com/photo-1486911278844-a81c5267e227?auto=format&fit=crop&w=2200&q=70') center/cover fixed;
+}
+body::after {
+    content:""; position:fixed; right:-8vw; bottom:-12vh; width:55vw; height:42vh; pointer-events:none; z-index:-1;
+    background:url('https://images.unsplash.com/photo-1454496522488-7a8e488e8606?auto=format&fit=crop&w=1400&q=65') center/cover no-repeat;
+    opacity:.08; filter:grayscale(.25); border-radius:50% 0 0 0;
+}
+.app-header { background:rgba(255,255,255,.96); color:#17222e; box-shadow:0 4px 18px rgba(35,62,78,.08); }
+.logo { color:#17384a; }
+.nav-btn { color:#5d7180; }
+.nav-btn:hover { background:#edf4f7; color:#16384a; }
+.map-sidebar { background:rgba(255,255,255,.97); color:#17222e; box-shadow:-8px 0 24px rgba(20,48,65,.08); }
+.legend-box, .official-card, .weather-details, .weather-chart-card, .hub-panel, .learning-card, .about-card, .about-hero, .beta-status-card { background:rgba(255,255,255,.95); color:#17222e; box-shadow:0 8px 24px rgba(27,55,72,.06); }
+.form-group label, .compact-label { color:#445a6a; }
+.form-group input, .form-group select, .form-group textarea, .sidebar-select { background:#fff; color:#17222e; border-color:#cfdbe3; }
+.mode-toggle span, .weather-overlay-options label { background:#f7fafc; color:#304b5d; }
+.btn-secondary { background:#e8f0f4; color:#284859; }
+.icon-btn { color:#334f60; }
+.report-preview { background:#f7fafc; }
+.instruction-text, .learning-card p, .hub-panel > p, .about-card p, .about-manifesto p, .learning-hero p, .about-hero p { color:#556b7a; }
+.hub-menu { background:rgba(255,255,255,.96); }
+.hub-menu-btn { color:#5b7180; }
+.hub-menu-btn:hover { background:#edf4f7; color:#16384a; }
+.learning-warning { background:linear-gradient(145deg,#fff,#edf5f8); color:#425c6c; box-shadow:0 12px 30px rgba(30,61,80,.08); }
+.learning-warning strong, .resource-card strong { color:#17384a; }
+.resource-row a, .resource-card { background:#f4f9fb; color:#185e84; }
+
+.mobile-map-menu { display:none; position:absolute; z-index:1050; top:14px; right:14px; width:44px; height:44px; border:1px solid #cad8e0; background:rgba(255,255,255,.96); color:#23485b; border-radius:12px; box-shadow:0 8px 24px rgba(25,53,70,.18); font-size:1.25rem; cursor:pointer; }
+.submission-guidance { margin:12px 0 18px; padding:12px 14px; border-left:4px solid var(--accent-blue); background:#eef7fb; color:#365363; border-radius:8px; line-height:1.45; }
+.extended-details { margin:18px 0; border:1px solid #d4e0e6; border-radius:11px; background:#f8fbfc; }
+.extended-details summary { padding:13px 15px; cursor:pointer; font-weight:800; color:#24495b; }
+.extended-details summary span { float:right; font-size:.76rem; font-weight:650; color:#7b8c98; }
+.extended-details > #slow-fields { padding:0 15px 15px; }
+.optional-label { font-weight:500; color:#85949f; }
+.compact-copy { margin-top:-2px; font-size:.86rem; }
+.small-inline-btn { width:auto; padding:8px 11px; }
+.snow-layer-editor { display:grid; gap:8px; margin-bottom:10px; }
+.snow-layer-row { display:grid; grid-template-columns:90px 1fr 1fr auto auto; gap:8px; align-items:end; padding:10px; border:1px solid #d7e0e6; border-radius:9px; background:#fff; }
+.snow-layer-row label { margin:0; font-size:.76rem; color:#607483; }
+.snow-layer-row input, .snow-layer-row select { width:100%; padding:8px; border:1px solid #d1dce3; border-radius:7px; background:#fff; color:#17222e; }
+.layer-weak-wrap { display:flex; align-items:center; gap:5px; min-height:38px; white-space:nowrap; }
+.layer-remove { border:0; background:#f6e7e7; color:#973535; border-radius:7px; padding:8px 10px; cursor:pointer; }
+.photo-preview-grid, .report-photo-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-top:10px; }
+.photo-preview-grid img, .report-photo-grid img { width:100%; aspect-ratio:4/3; object-fit:cover; border-radius:8px; border:1px solid #d6e0e6; }
+.report-detail-modal { width:min(95vw,900px); }
+.report-detail-header { padding-right:38px; }
+.report-detail-meta { display:flex; flex-wrap:wrap; gap:7px; margin:8px 0 16px; }
+.report-section { margin-top:20px; padding-top:16px; border-top:1px solid #dce5ea; }
+.report-section h4 { margin:0 0 10px; color:#24495b; }
+.report-summary-table { display:grid; grid-template-columns:160px 1fr; gap:8px 14px; }
+.report-summary-table .k { color:#738593; }
+.popup-report-entry .popup-summary-note { max-width:300px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.view-report-btn { margin-top:8px; }
+.snow-profile { height:320px; display:flex; align-items:stretch; gap:14px; padding:12px; background:linear-gradient(#f8fbfd,#eaf2f6); border:1px solid #d6e1e7; border-radius:10px; }
+.snow-profile-column { width:120px; display:flex; flex-direction:column; justify-content:flex-start; border:1px solid #b9c9d3; background:#fff; }
+.snow-profile-layer { min-height:18px; display:flex; align-items:center; justify-content:center; text-align:center; padding:4px; border-bottom:1px solid rgba(85,111,126,.22); font-size:.72rem; overflow:hidden; }
+.snow-profile-layer.is-weak { outline:3px solid #d85c4a; outline-offset:-3px; font-weight:900; }
+.snow-profile-legend { flex:1; font-size:.85rem; color:#526876; overflow:auto; }
+.beta-container { width:min(1120px,100%); }
+.beta-hero { padding:32px; border-radius:16px; background:rgba(255,255,255,.95); border:1px solid #d8e2e7; margin-bottom:18px; }
+.beta-hero h2 { font-size:clamp(2rem,4vw,3rem); margin:8px 0 12px; }
+.beta-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+.beta-status-card { margin-top:18px; padding:20px; border:1px solid #d8e2e7; border-radius:12px; }
+
+@media (max-width:900px) {
+  .mobile-map-menu { display:block; }
+  .snow-layer-row { grid-template-columns:1fr 1fr; }
+  .snow-layer-row .wide-mobile { grid-column:1/-1; }
+  .photo-preview-grid, .report-photo-grid { grid-template-columns:1fr 1fr; }
+  .report-summary-table { grid-template-columns:1fr; gap:3px; }
+  .report-summary-table .v { margin-bottom:8px; }
+  .beta-grid { grid-template-columns:1fr; }
+}
+
+/* v4.1 terrain prototype, reporting geometry, accessibility fixes ---------- */
+/* Local background hooks: replace the two files in assets/backgrounds/. */
+body::before { background: linear-gradient(rgba(246,249,251,.97), rgba(246,249,251,.97)); }
+body::after { display:none; }
+#page3 {
+    background-image: linear-gradient(rgba(244,248,250,.78), rgba(244,248,250,.90)), url('assets/backgrounds/learn-rescue.jpg');
+    background-size: cover; background-position: center; background-attachment: fixed;
+}
+#page4 {
+    background-image: linear-gradient(rgba(244,248,250,.76), rgba(244,248,250,.90)), url('assets/backgrounds/who-we-are.jpg');
+    background-size: cover; background-position: center; background-attachment: fixed;
+}
+#page3 .content-container, #page4 .content-container { position:relative; z-index:1; }
+
+/* Light-mode readability fixes for labels/cards that inherited dark-theme values. */
+.pill { background:#e5eef3; color:#24495b; border:1px solid #cad8e0; font-weight:750; }
+.marker-symbol-grid { color:#425d6d; }
+.rescue-steps li { background:#fff; color:#304b5b; border-color:#d2dde4; }
+.rescue-steps li strong { color:#17384a; }
+.rescue-steps li::before { color:#fff; }
+.report-preview, .popup-report-entry, .terrain-cell-popup { color:#17222e; }
+.leaflet-popup-content-wrapper, .leaflet-popup-tip { color:#17222e; }
+
+.submission-required-note, .terrain-critical-warning {
+    margin:12px 0 18px; padding:12px 14px; border-left:4px solid #b4232c;
+    background:#fff0f1; color:#7f1d26; border-radius:8px; line-height:1.45;
+}
+.required-mark {
+    display:inline-block; margin-left:5px; padding:2px 6px; border-radius:999px;
+    background:#fde4e6; color:#a21f2a; font-size:.68rem; font-weight:850; vertical-align:1px;
+}
+.danger-guidance { border-left-color:#b4232c; background:#fff6f5; color:#6f3434; }
+
+.avalanche-sketch-section { margin:18px 0 8px; }
+.report-avalanche-map { width:100%; height:330px; border:1px solid #cfdbe3; border-radius:12px; overflow:hidden; background:#e9f0f4; }
+.sketch-toolbar { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin-top:9px; }
+.sketch-toolbar .btn { padding:9px 8px; }
+.active-draw-tool { background:#146f9c !important; color:#fff !important; box-shadow:0 0 0 2px rgba(20,111,156,.16); }
+.report-geometry-summary { color:#4b6473; }
+
+.beta-sidebar { width:390px; flex-basis:390px; }
+.beta-eyebrow { display:block; margin-bottom:6px; color:#a02a33; }
+.terrain-run-btn { width:100%; margin:2px 0 10px; }
+.terrain-beta-status { margin-top:12px; padding:12px; border:1px solid #d5e0e6; border-radius:10px; background:#f8fbfc; }
+.terrain-status-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.terrain-status-grid > div { padding:9px; border:1px solid #dde6eb; border-radius:8px; background:#fff; }
+.terrain-status-grid span { display:block; font-size:.72rem; color:#728593; margin-bottom:3px; }
+.terrain-status-grid strong { color:#203f50; font-size:.9rem; }
+.terrain-model-note { margin:12px 0 0; color:#536b79; font-size:.83rem; line-height:1.45; }
+.terrain-beta-legend { margin-top:14px; padding:12px; border:1px solid #d5e0e6; border-radius:10px; background:#fff; }
+.terrain-gradient { height:14px; margin-top:8px; border:1px solid #c5d2d9; border-radius:999px; background:linear-gradient(90deg,#5aa85f 0%,#d9c73d 30%,#e98a2f 52%,#cf4238 75%,#721b27 100%); }
+.terrain-beta-legend small { display:block; margin-top:8px; color:#677b88; line-height:1.4; }
+.terrain-cell-popup small { color:#7b2831; font-weight:700; }
+
+@media (max-width:900px) {
+    #page-beta .map-sidebar {
+        position:absolute; left:10px; right:10px; bottom:10px; top:auto; width:auto; max-height:min(72dvh,620px); z-index:1100;
+        transform:translateY(calc(100% + 24px)); opacity:0; pointer-events:none;
+        border:1px solid #cfdbe3; border-radius:16px; box-shadow:0 20px 55px rgba(0,0,0,.28);
+        transition:transform .22s ease, opacity .22s ease; padding:12px 16px 18px;
+    }
+    #page-beta .map-sidebar.mobile-open { transform:translateY(0); opacity:1; pointer-events:auto; }
+    .sketch-toolbar { grid-template-columns:1fr 1fr; }
+    .report-avalanche-map { height:290px; }
+    .terrain-status-grid { grid-template-columns:1fr; }
+    #page3, #page4 { background-attachment:scroll; }
+}
+
+/* v4.2 legal, normalized reports, historical layers ---------------------- */
+.terrain-liability-card { border-top:5px solid #a51f2a; }
+.terrain-liability-card h2 { color:#7d1d26; margin-top:8px; }
+.terrain-liability-card li { margin:7px 0; line-height:1.45; }
+.liability-fineprint { padding:10px 12px; background:#f5f7f8; border:1px solid #d8e0e5; border-radius:8px; color:#526775; font-size:.86rem; line-height:1.45; }
+.field-help { display:block; margin-top:5px; color:#6d818f; font-size:.75rem; line-height:1.35; }
+.auto-terrain-summary { min-height:42px; display:flex; align-items:center; padding:9px 11px; background:#f5f9fb; border:1px solid #d4dfe5; border-radius:7px; color:#294c5f; font-weight:700; }
+.auto-terrain-note { margin-top:2px; }
+.report-quality-grid { margin-bottom:4px; }
+.sidebar-subgroup { margin:14px 0; padding:11px 12px; background:#f7fafb; border:1px solid #d8e3e8; border-radius:9px; }
+.sidebar-subgroup > strong { color:#24495b; font-size:.86rem; }
+.checkbox-label:has(input:disabled) { opacity:.52; cursor:not-allowed; }
+.license-badge { position:fixed; z-index:999; right:8px; bottom:6px; max-width:min(680px,calc(100vw - 16px)); padding:4px 8px; border-radius:6px; background:rgba(255,255,255,.86); border:1px solid rgba(181,197,205,.75); color:#536a78; font-size:.66rem; line-height:1.25; box-shadow:0 2px 10px rgba(30,60,75,.08); backdrop-filter:blur(4px); }
+.license-badge a { color:#1f6386; }
+@media (max-width:900px) {
+  .license-badge { right:5px; bottom:4px; font-size:.58rem; max-width:calc(100vw - 10px); }
+}
+
+/* Catalonia/Senyera badge: avoids using the Spanish flag for Catalonia. */
+.senyera-flag {
+    display:inline-block; width:1.35em; height:.9em; margin-right:.32em; vertical-align:-.08em;
+    border:1px solid rgba(87,60,32,.28); border-radius:2px; box-shadow:0 1px 2px rgba(0,0,0,.08);
+    background:repeating-linear-gradient(to bottom, #f4c542 0 11.111%, #c92f2f 11.111% 22.222%);
+}
+.language-btn .senyera-flag { margin-right:.42em; }
