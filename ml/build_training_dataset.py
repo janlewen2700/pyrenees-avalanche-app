@@ -54,16 +54,22 @@ def fetch_weather(lat: float, lon: float, timestamp: pd.Timestamp, session: requ
     w = pd.DataFrame(h)
     w["time"] = pd.to_datetime(w["time"], utc=True)
     ts = timestamp.tz_convert("UTC") if timestamp.tzinfo else timestamp.tz_localize("UTC")
-    w = w[w.time <= ts]
+    w = w[w.time < ts]
     if w.empty:
         return {}
     last24, last72 = w[w.time > ts-pd.Timedelta(hours=24)], w[w.time > ts-pd.Timedelta(hours=72)]
     def summ(frame: pd.DataFrame, col: str) -> float:
-        return float(pd.to_numeric(frame.get(col), errors="coerce").fillna(0).sum()) if col in frame else np.nan
+        return float(pd.to_numeric(frame[col], errors="coerce").sum(min_count=len(frame))) if col in frame and len(frame) else np.nan
     def maxi(frame: pd.DataFrame, col: str) -> float:
         return float(pd.to_numeric(frame.get(col), errors="coerce").max()) if col in frame else np.nan
     def mean(frame: pd.DataFrame, col: str) -> float:
         return float(pd.to_numeric(frame.get(col), errors="coerce").mean()) if col in frame else np.nan
+    def circular_mean(frame, col):
+        if col not in frame: return np.nan
+        angles = np.deg2rad(pd.to_numeric(frame[col], errors='coerce').dropna())
+        if len(angles) == 0: return np.nan
+        x, y = np.cos(angles).mean(), np.sin(angles).mean()
+        return float(np.rad2deg(np.arctan2(y, x)) % 360) if np.hypot(x, y) > 1e-6 else np.nan
     snowfall24 = summ(last24, "snowfall")
     snowfall72 = summ(last72, "snowfall")
     # Open-Meteo snowfall is documented as cm.
@@ -76,7 +82,7 @@ def fetch_weather(lat: float, lon: float, timestamp: pd.Timestamp, session: requ
         "temp_max_24h_c": maxi(last24, "temperature_2m"),
         "wind_mean_24h_kmh": mean(last24, "wind_speed_10m"),
         "wind_gust_max_24h_kmh": maxi(last24, "wind_gusts_10m"),
-        "wind_dir_mean_24h_deg": mean(last24, "wind_direction_10m"),
+        "wind_dir_mean_24h_deg": circular_mean(last24, "wind_direction_10m"),
         "solar_24h_whm2_proxy": summ(last24, "shortwave_radiation"),
         "snow_depth_m": float(pd.to_numeric(w.get("snow_depth"), errors="coerce").dropna().iloc[-1]) if "snow_depth" in w and pd.to_numeric(w.get("snow_depth"), errors="coerce").notna().any() else np.nan,
     }

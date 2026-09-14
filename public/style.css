@@ -355,11 +355,11 @@ body::after {
 body::before { background: linear-gradient(rgba(246,249,251,.97), rgba(246,249,251,.97)); }
 body::after { display:none; }
 #page3 {
-    background-image: linear-gradient(rgba(244,248,250,.78), rgba(244,248,250,.90)), url('assets/backgrounds/learn-rescue.jpg');
+    background-image: linear-gradient(rgba(244,248,250,.78), rgba(244,248,250,.90)), url('/assets/backgrounds/learn-rescue.JPG');
     background-size: cover; background-position: center; background-attachment: fixed;
 }
 #page4 {
-    background-image: linear-gradient(rgba(244,248,250,.76), rgba(244,248,250,.90)), url('assets/backgrounds/who-we-are.jpg');
+    background-image: linear-gradient(rgba(244,248,250,.76), rgba(244,248,250,.90)), url('/assets/backgrounds/who-we-are.JPG');
     background-size: cover; background-position: center; background-attachment: fixed;
 }
 #page3 .content-container, #page4 .content-container { position:relative; z-index:1; }
@@ -443,3 +443,17 @@ body::after { display:none; }
     background:repeating-linear-gradient(to bottom, #f4c542 0 11.111%, #c92f2f 11.111% 22.222%);
 }
 .language-btn .senyera-flag { margin-right:.42em; }
+
+/* Local imagery slots: replace photographs in assets/backgrounds. */
+.mountain-gallery {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;margin:0 0 28px;}
+.mountain-photo {position:relative;margin:0;min-height:210px;overflow:hidden;border-radius:18px;background:linear-gradient(145deg,#1b4554,#759296);color:white;}
+.mountain-photo img {width:100%;height:250px;object-fit:cover;display:block;}
+.mountain-photo img[hidden] {display:none;}
+.mountain-photo figcaption {position:absolute;bottom:0;left:0;right:0;padding:30px 18px 16px;background:linear-gradient(transparent,rgba(0,0,0,.75));font-weight:700;}
+.photo-empty {padding:35px 20px;color:#eef7f8;}
+.regional-flag,.basque-flag {display:inline-block;width:25px;height:17px;object-fit:cover;vertical-align:middle;border-radius:2px;}
+.basque-flag {background:linear-gradient(90deg,transparent 42%,white 42% 58%,transparent 58%),linear-gradient(transparent 38%,white 38% 62%,transparent 62%),linear-gradient(34deg,transparent 40%,#168447 40% 60%,transparent 60%),linear-gradient(-34deg,transparent 40%,#168447 40% 60%,transparent 60%),#d52b30;}
+.translation-status {position:fixed;bottom:32px;right:8px;z-index:1100;max-width:300px;padding:8px 12px;background:#fff3ce;color:#453717;border-radius:8px;font-size:.75rem;}
+@media(max-width:650px) {.mountain-gallery{grid-template-columns:1fr}.mountain-photo{min-height:180px}}
+
+.terrain-gradient {background:linear-gradient(90deg,#f1eef6,#d7b5d8,#bd80bd,#9949a3,#762489,#49006a);}

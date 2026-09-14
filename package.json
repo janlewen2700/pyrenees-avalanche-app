@@ -1,11 +1,11 @@
 {
   "name": "pyrenees-avalanche-app",
-  "version": "4.3.0",
+  "version": "4.4.0",
   "description": "Cross-border Pyrenees avalanche safety network with normalized reporting, radar, high-resolution terrain beta, historical avalanche overlays and an ML research pipeline",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js && node --check app.js && node --check translations.js && node --check hazard-model.js"
+    "check": "node --check server.js && node --check public/app.js && node --check translations.js && node --check hazard-model.js"
   },
   "engines": {
     "node": ">=18"

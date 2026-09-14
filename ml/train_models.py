@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse, json
 from pathlib import Path
 import joblib, numpy as np, pandas as pd
+from sklearn.base import clone
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassifier
 from sklearn.impute import SimpleImputer
@@ -29,7 +30,10 @@ def main():
     ap=argparse.ArgumentParser(); ap.add_argument('--data',required=True,type=Path); ap.add_argument('--output',required=True,type=Path)
     ap.add_argument('--holdout-valley',help='Exact valley_id or spatial_block held out completely.')
     ap.add_argument('--holdout-season',type=int,help='season_year held out completely, e.g. 2024 for winter 2024/25.')
+    ap.add_argument('--features', required=True, help='Comma-separated audited pre-event feature columns; never labels, outcomes or provenance.')
     a=ap.parse_args(); df=read_table(a.data)
+    if 'label' not in df or df.label.isna().any() or not df.label.isin([0,1]).all(): raise SystemExit('Labels must be 0 or 1 without missing values.')
+    if 'source_event_id' in df and df.loc[df.label.eq(1), 'source_event_id'].dropna().duplicated().any(): raise SystemExit('Duplicate event IDs: deduplicate events before splitting.')
     if 'label' not in df or df.label.nunique()<2: raise SystemExit('Need both label classes.')
     group_col='valley_id' if 'valley_id' in df else ('spatial_block' if 'spatial_block' in df else None)
     hold=np.zeros(len(df),dtype=bool); hold_notes=[]
@@ -39,6 +43,7 @@ def main():
     if a.holdout_season is not None:
         if 'season_year' not in df: raise SystemExit('--holdout-season requires season_year.')
         hold |= pd.to_numeric(df.season_year,errors='coerce').eq(a.holdout_season).to_numpy(); hold_notes.append(f'season_year={a.holdout_season}')
+    if (a.holdout_valley or a.holdout_season is not None) and not hold.any(): raise SystemExit('The requested holdout matches no rows.')
     # If no explicit holdout is supplied, reserve one entire spatial group as a development spatial holdout.
     if not hold.any() and group_col:
         counts=df.groupby(group_col).label.agg(['count','sum']); eligible=counts[(counts['sum']>0)&((counts['count']-counts['sum'])>0)]
@@ -46,20 +51,26 @@ def main():
             chosen=str(eligible.sort_values('count',ascending=False).index[0]); hold=df[group_col].astype(str).eq(chosen).to_numpy(); hold_notes.append(f'auto {group_col}={chosen}')
     train=df.loc[~hold].copy(); test=df.loc[hold].copy()
     if train.label.nunique()<2: raise SystemExit('Training split lost a class; choose another holdout.')
-    features=[c for c in df.columns if c not in NON_FEATURE]
-    Xtr,ytr=train[features],train.label.astype(int).to_numpy(); Xte,yte=test[features],test.label.astype(int).to_numpy() if len(test) else (None,None)
+    if test.empty or test.label.nunique() < 2: raise SystemExit('Need an independent two-class holdout; refusing to rank models using training scores.')
+    features=[c.strip() for c in a.features.split(',') if c.strip()]
+    if not features or len(set(features)) != len(features): raise SystemExit('Provide a nonempty, unique feature list.')
+    blocked=set(features) & NON_FEATURE
+    missing=set(features) - set(df.columns)
+    if blocked or missing: raise SystemExit(f'Blocked features: {sorted(blocked)}; missing features: {sorted(missing)}')
+    if train[features].isna().all().any(): raise SystemExit('A requested feature is entirely missing in training data.')
+    Xtr,ytr=train[features],train.label.astype(int).to_numpy(); Xte,yte=test[features],test.label.astype(int).to_numpy()
     cat=[c for c in features if Xtr[c].dtype=='object']; num=[c for c in features if c not in cat]
     prep=ColumnTransformer([('num',Pipeline([('imp',SimpleImputer(strategy='median')),('scale',StandardScaler())]),num),('cat',Pipeline([('imp',SimpleImputer(strategy='most_frequent')),('oh',OneHotEncoder(handle_unknown='ignore',sparse_output=False))]),cat)])
     results={}; fitted={}
     for name,est in make_models().items():
-        pipe=Pipeline([('prep',prep),('model',est)]); pipe.fit(Xtr,ytr); fitted[name]=pipe
+        pipe=Pipeline([('prep',clone(prep)),('model',est)]); pipe.fit(Xtr,ytr); fitted[name]=pipe
         r={'train':score(ytr,pipe.predict_proba(Xtr)[:,1])}
         if len(test) and test.label.nunique()>=2: r['holdout']=score(yte,pipe.predict_proba(Xte)[:,1])
         else: r['holdout']={'warning':'No valid two-class holdout was available. Supply --holdout-valley and/or --holdout-season.'}
         results[name]=r
-    rank=lambda n: results[n].get('holdout',{}).get('average_precision',results[n]['train']['average_precision'])
+    rank=lambda n: results[n]['holdout']['average_precision']
     best=max(results,key=rank); a.output.mkdir(parents=True,exist_ok=True)
     joblib.dump({'pipeline':fitted[best],'feature_columns':features,'model_name':best},a.output/'candidate.joblib')
-    report={'warning':'Research only. A holdout score is not deployment approval. Validate on independent valleys AND winters before any public safety use.','holdout':hold_notes,'best_model':best,'results':results}
+    report={'warning':'Research only. A holdout score is not deployment approval. Validate on independent valleys AND winters before any public safety use.','feature_columns':features,'label_kinds':df.label_kind.unique().tolist() if 'label_kind' in df else [],'calibrated_event_probability':False,'holdout':hold_notes,'best_model':best,'results':results}
     (a.output/'metrics.json').write_text(json.dumps(report,indent=2)); print(json.dumps(report,indent=2))
 if __name__=='__main__': main()

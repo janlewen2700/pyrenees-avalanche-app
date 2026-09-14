@@ -34,11 +34,22 @@ if (hasDedicatedPublicDir) {
     app.get('/index.html', (_req, res) => res.sendFile(path.join(ROOT, 'index.html')));
 }
 
+// Root assets are explicit: never expose server source or deployment secrets.
+for (const file of ['translations.js', 'hazard-model.js', 'manifest.webmanifest', 'sw.js']) {
+    app.get('/' + file, (_req, res) => {
+        if (file === 'sw.js') res.set('Cache-Control', 'no-cache');
+        res.sendFile(path.join(ROOT, file));
+    });
+}
+app.get('/assets/*', (_req, res) => res.sendStatus(404));
+
 const databaseUrl = process.env.DATABASE_URL || null;
+const localStorageAllowed = !databaseUrl && process.env.NODE_ENV !== 'production' && !process.env.RENDER;
 const pool = databaseUrl
-    ? new Pool({ connectionString: databaseUrl, ssl: { rejectUnauthorized: false } })
+    ? new Pool({ connectionString: databaseUrl, connectionTimeoutMillis: 8000, query_timeout: 15000, ssl: { rejectUnauthorized: true } })
     : null;
 
+if (pool) pool.on('error', error => { dbReady = false; console.error('Idle database connection failed:', error.message); });
 let dbReady = false;
 let dbInitError = null;
 let dbInitPromise = null;
@@ -373,7 +384,7 @@ function ownerHashFromRequest(req) {
 
 async function initDatabase() {
     if (!pool) {
-        dbInitError = 'DATABASE_URL is not configured; using local JSON fallback storage.';
+        dbInitError = 'DATABASE_URL is not configured. Local JSON is for local development only.';
         return false;
     }
 
@@ -392,6 +403,7 @@ async function initDatabase() {
             );
         `);
         await pool.query('ALTER TABLE observations ADD COLUMN IF NOT EXISTS owner_token_hash TEXT;');
+        await pool.query('ALTER TABLE observations ENABLE ROW LEVEL SECURITY;');
         await pool.query('CREATE INDEX IF NOT EXISTS idx_obs_geom ON observations USING GIST (geom);');
         await pool.query('CREATE INDEX IF NOT EXISTS idx_obs_type_season ON observations (type, season_year);');
         await pool.query('CREATE INDEX IF NOT EXISTS idx_obs_owner ON observations (owner_token_hash);');
@@ -402,15 +414,26 @@ async function initDatabase() {
     } catch (error) {
         dbReady = false;
         dbInitError = error.message;
-        console.warn(`Database unavailable; using local JSON fallback storage: ${error.message}`);
+        console.warn(`Database unavailable; observations are temporarily unavailable: ${error.message}`);
         return false;
     }
 }
 
+let lastDatabaseAttempt = 0;
 function ensureDatabase() {
-    if (!dbInitPromise) dbInitPromise = initDatabase();
+    if (dbReady) return Promise.resolve(true);
+    if (dbInitPromise) return dbInitPromise;
+    if (Date.now() - lastDatabaseAttempt < 10000) return Promise.resolve(false);
+    lastDatabaseAttempt = Date.now();
+    dbInitPromise = initDatabase().finally(() => { dbInitPromise = null; });
     return dbInitPromise;
 }
+function storageUnavailable(res) {
+    if (dbReady || localStorageAllowed) return false;
+    res.status(503).json({ error: 'Observation database unavailable. Your report has not been saved; please retry later.' });
+    return true;
+}
+
 
 async function readFallbackObservations() {
     try {
@@ -425,7 +448,9 @@ async function readFallbackObservations() {
 
 async function writeFallbackObservations(items) {
     await fsp.mkdir(path.dirname(fallbackDataFile), { recursive: true });
-    await fsp.writeFile(fallbackDataFile, JSON.stringify(items, null, 2), 'utf8');
+    const temporary = fallbackDataFile + '.tmp';
+    await fsp.writeFile(temporary, JSON.stringify(items, null, 2), 'utf8');
+    await fsp.rename(temporary, fallbackDataFile);
 }
 
 function toGeoJsonFeature(item, requesterOwnerHash = null) {
@@ -448,24 +473,30 @@ function featureCollection(features) {
 }
 
 function validateObservation(body) {
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return { error: 'Invalid observation.' };
     const allowedTypes = new Set(['trip_report', 'avalanche', 'accident', 'snowpack']);
     const lat = Number(body.lat);
     const lng = Number(body.lng);
+    if (body.lat == null || body.lng == null || body.lat === '' || body.lng === '') return { error: 'Coordinates are required.' };
     if (!allowedTypes.has(body.type)) return { error: 'Invalid observation type.' };
     if (!Number.isFinite(lat) || lat < -90 || lat > 90) return { error: 'Latitude must be between -90 and 90.' };
     if (!Number.isFinite(lng) || lng < -180 || lng > 180) return { error: 'Longitude must be between -180 and 180.' };
-    if (!body.details || typeof body.details !== 'object') return { error: 'Observation details are required.' };
+    if (!body.details || typeof body.details !== 'object' || Array.isArray(body.details)) return { error: 'Observation details are required.' };
 
     const d = body.details;
-    const requiredText = [['title','Report title'], ['aspect','Aspect'], ['notes','Field description'], ['observedAt','Observation date/time']];
+    const requiredText = [['title','Report title'], ['notes','Field description'], ['observedAt','Observation date/time']];
     for (const [key, label] of requiredText) {
         if (!String(d[key] || '').trim()) return { error: `${label} is required.` };
     }
     const observedMs = Date.parse(String(d.observedAt || ''));
     if (!Number.isFinite(observedMs)) return { error: 'Observation date/time is invalid.' };
     if (observedMs > Date.now() + 60 * 60 * 1000) return { error: 'Observation date/time cannot be in the future.' };
-    if (!Number.isFinite(Number(d.elevation))) return { error: 'Elevation is required.' };
-    if (!Number.isFinite(Number(d.slope))) return { error: 'Slope angle is required.' };
+    // Missing terrain is unknown, never zero or an invented north-facing slope.
+    for (const [key, max] of [['elevation', 9000], ['slope', 90]]) {
+        if (d[key] != null && d[key] !== '' && (typeof d[key] !== 'number' || !Number.isFinite(d[key]) || d[key] < 0 || d[key] > max)) return { error: `Invalid ${key}.` };
+    }
+    if (d.aspect && !['N','NE','E','SE','S','SW','W','NW'].includes(d.aspect)) return { error: 'Invalid aspect.' };
+
     if (['avalanche', 'accident'].includes(body.type)) {
         if (!String(d.avalancheSize || '').trim()) return { error: 'Avalanche size is required for avalanche/incident reports.' };
         if (!String(d.avalancheCharacter || '').trim()) return { error: 'Avalanche character is required for avalanche/incident reports.' };
@@ -491,11 +522,12 @@ function validateObservation(body) {
 
 app.get('/api/health', async (_req, res) => {
     await ensureDatabase();
-    res.json({
-        ok: true,
-        storage: dbReady ? 'postgresql-postgis' : 'local-json-fallback',
+    const available = dbReady || localStorageAllowed;
+    res.status(available ? 200 : 503).json({
+        ok: available,
+        storage: dbReady ? 'postgresql-postgis' : localStorageAllowed ? 'local-json-fallback' : 'unavailable',
         persistentAcrossDeploys: dbReady,
-        databaseError: dbReady ? null : dbInitError
+        databaseError: dbReady ? null : 'Database not ready. Check server logs and DATABASE_URL.'
     });
 });
 
@@ -555,8 +587,22 @@ app.get('/api/historical-avalanches', async (_req, res) => {
     });
 });
 
+// Serialize local development writes so concurrent requests cannot lose observations.
+let localWriteQueue = Promise.resolve();
+app.use('/api/observations', async (req, res, next) => {
+    if (!localStorageAllowed || !['POST', 'DELETE'].includes(req.method)) return next();
+    const previous = localWriteQueue;
+    let release;
+    localWriteQueue = new Promise(resolve => { release = resolve; });
+    await previous;
+    res.once('finish', release); res.once('close', release);
+    if (res.destroyed) { release(); return; }
+    next();
+});
+
 app.get('/api/observations', async (req, res) => {
     await ensureDatabase();
+    if (storageUnavailable(res)) return;
     const seasonYear = getSeasonYear();
     const ownerHash = ownerHashFromRequest(req);
 
@@ -584,6 +630,7 @@ app.get('/api/observations', async (req, res) => {
 
 app.post('/api/observations', async (req, res) => {
     await ensureDatabase();
+    if (storageUnavailable(res)) return;
     const validation = validateObservation(req.body);
     if (validation.error) return res.status(400).json({ error: validation.error });
 
@@ -636,6 +683,7 @@ app.post('/api/observations', async (req, res) => {
 
 app.delete('/api/observations/:id', async (req, res) => {
     await ensureDatabase();
+    if (storageUnavailable(res)) return;
     const id = Number(req.params.id);
     const ownerHash = ownerHashFromRequest(req);
     if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Invalid observation id.' });
@@ -901,7 +949,8 @@ async function fetchElevationPoints(points) {
         });
         const data = await fetchJsonWithTimeout(`https://api.open-meteo.com/v1/elevation?${params.toString()}`, 16000);
         const elevations = Array.isArray(data?.elevation) ? data.elevation : [];
-        batch.forEach((point, index) => output.push({ ...point, elevationM: Number(elevations[index]) }));
+        if (elevations.length !== batch.length || elevations.some(value => typeof value !== 'number' || !Number.isFinite(value) || value < -500)) throw new Error('Elevation provider returned missing or invalid values.');
+        batch.forEach((point, index) => output.push({ ...point, elevationM: elevations[index] }));
     }
     return output;
 }
@@ -918,7 +967,7 @@ async function fetchFranceRgeElevationPoints(points) {
         }, 30000);
         const elevations = Array.isArray(data?.elevations) ? data.elevations : [];
         batch.forEach((point, index) => {
-            const raw = Number(elevations[index]);
+            const raw = elevations[index] == null ? NaN : Number(elevations[index]);
             output.push({ ...point, elevationM: Number.isFinite(raw) && raw > -90000 ? raw : NaN });
         });
     }
@@ -1350,6 +1399,7 @@ app.get('/api/terrain/analyze', async (req, res) => {
                 advisoryScore: Number(cell.advisoryScore.toFixed(3))
             }))
         };
+        if (terrainAnalysisCache.size >= 100) terrainAnalysisCache.delete(terrainAnalysisCache.keys().next().value);
         terrainAnalysisCache.set(key, { timestamp: Date.now(), data: payload });
         res.json(payload);
     } catch (error) {
@@ -1443,6 +1493,7 @@ app.get('/LICENSE', (_req, res) => res.type('text/plain').sendFile(path.join(ROO
 app.get('/MEDIA_LICENSE.md', (_req, res) => res.type('text/markdown').sendFile(path.join(ROOT, 'MEDIA_LICENSE.md')));
 app.get('/NOTICE.md', (_req, res) => res.type('text/markdown').sendFile(path.join(ROOT, 'NOTICE.md')));
 
+app.use('/api', (_req, res) => res.status(404).json({ error: 'Unknown API endpoint.' }));
 app.get('*', (_req, res) => {
     res.sendFile(path.join(publicDir, 'index.html'));
 });

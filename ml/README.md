@@ -57,3 +57,21 @@ pip install -r requirements.txt
 python build_training_dataset.py --events data/events.csv --background data/background.csv --out data/training.csv
 python train_models.py --data data/training.csv --output models
 ```
+
+## v4.4 training guard changes
+
+An explicit audited feature list is now mandatory, for example:
+
+```bash
+python train_models.py --data training.csv --output runs/development \
+  --features slope_deg,elevation_m,aspect_sin,aspect_cos,snowfall_72h_cm \
+  --holdout-valley YOUR_HELD_OUT_VALLEY
+```
+
+Use column names actually present in your table. Do not put avalanche size,
+trigger, casualties, post-event measurements, source IDs, or label-derived masks
+in the feature list. Explicit features prevent accidental automatic inclusion;
+they do not replace a leakage audit. One split selects a development candidate;
+it is not an untouched final test. Reserve additional valleys and winters before
+model selection. No valid two-class holdout now stops training. Synthetic tests
+verify code only and do not validate an avalanche model.

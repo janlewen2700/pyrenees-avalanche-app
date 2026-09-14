@@ -95,9 +95,9 @@
                         <div class="form-group">
                             <label for="form-type">Type of observation <span class="required-mark">Required</span></label>
                             <select id="form-type" required>
-                                <option value="avalanche">⚠️ Avalanche (permanent)</option>
+                                <option value="avalanche">🏔️ Avalanche (permanent)</option>
                                 <option value="accident">🚨 Accident / incident (permanent)</option>
-                                <option value="snowpack">❄️ Snowpack (current season)</option>
+                                <option value="snowpack">🔎 Snowpack (current season)</option>
                                 <option value="trip_report">🎿 Trip report (current season)</option>
                             </select>
                         </div>
@@ -105,9 +105,6 @@
 
                     <div class="section-title">Avalanche / terrain essentials</div>
                     <div class="form-grid three">
-                        <div class="form-group"><label>Aspect <span class="required-mark">Required</span></label><select id="form-aspect"><option>N</option><option>NE</option><option>E</option><option>SE</option><option>S</option><option>SW</option><option>W</option><option>NW</option></select></div>
-                        <div class="form-group"><label>Elevation (m) <span class="required-mark">Required</span></label><input type="number" id="form-elevation" min="0" max="4500" required placeholder="2200"></div>
-                        <div class="form-group"><label>Slope angle (°) <span class="required-mark">Required</span></label><input type="number" id="form-slope" min="0" max="90" required placeholder="36"></div>
                         <div class="form-group avalanche-required-field"><label>Avalanche size <span class="required-mark avalanche-required-mark">Required for avalanche</span></label><select id="form-avalanche-size"><option value="">Unknown / N/A</option><option>1</option><option>1.5</option><option>2</option><option>2.5</option><option>3</option><option>3.5</option><option>4</option><option>4.5</option><option>5</option></select></div>
                         <div class="form-group avalanche-required-field"><label>Character <span class="required-mark avalanche-required-mark">Required for avalanche</span></label><select id="form-character"><option value="">Unknown / N/A</option><option>Wind slab</option><option>Storm slab</option><option>Persistent slab</option><option>Deep persistent slab</option><option>Wet slab</option><option>Loose dry</option><option>Loose wet</option><option>Cornice only</option><option>Cornice with slab</option></select></div>
                         <div class="form-group avalanche-required-field"><label>Trigger <span class="required-mark avalanche-required-mark">Required for avalanche</span></label><select id="form-trigger"><option value="">Unknown / N/A</option><option>Natural</option><option>Skier</option><option>Snowmobile</option><option>Other vehicle</option><option>Explosives</option><option>Remote</option></select></div>
@@ -138,6 +135,16 @@
                         <div class="form-group"><label>Injured</label><input type="number" id="form-injured" min="0" max="100" value="0"></div>
                         <div class="form-group"><label>Fatalities</label><input type="number" id="form-fatalities" min="0" max="100" value="0"></div>
                     </div>
+
+                    <details id="terrain-details" class="extended-details">
+                        <summary>Extra terrain parameters · automatically estimated</summary>
+                        <p>Elevation is altitude above sea level. Aspect is the direction the slope faces. Estimates can be corrected; unavailable values remain unknown.</p>
+                        <div class="form-grid three">
+                        <div class="form-group"><label>Aspect</label><select id="form-aspect"><option value="">Unknown</option><option value="N">N</option><option>NE</option><option>E</option><option>SE</option><option>S</option><option>SW</option><option>W</option><option>NW</option></select></div>
+                        <div class="form-group"><label>Elevation (m)</label><input type="number" id="form-elevation" min="0" max="9000" placeholder="2200"></div>
+                        <div class="form-group"><label>Slope angle (°)</label><input type="number" id="form-slope" step="0.1" min="0" max="90" placeholder="36"></div>
+                        </div>
+                    </details>
 
                     <details class="extended-details">
                         <summary>More snowpack & test details <span>optional</span></summary>
@@ -205,10 +212,10 @@
                 <button id="language-menu-btn" class="language-current" type="button" aria-haspopup="true" aria-expanded="false"><span id="current-language">🇬🇧 English</span> ▾</button>
                 <div id="language-menu" class="language-menu hidden">
                     <button class="language-btn" data-lang="ca" type="button"><span class="senyera-flag" aria-hidden="true"></span> Català</button>
+                    <button class="language-btn" data-lang="oc" type="button"><img class="regional-flag" src="/assets/flags/aran.svg" alt=""> Aranés</button>
+                    <button class="language-btn" data-lang="eu" type="button"><span class="basque-flag" aria-hidden="true"></span> Euskara</button>
                     <button class="language-btn" data-lang="es" type="button">🇪🇸 Español</button>
                     <button class="language-btn" data-lang="fr" type="button">🇫🇷 Français</button>
-                    <button class="language-btn" data-lang="de" type="button">🇩🇪 Deutsch</button>
-                    <button class="language-btn" data-lang="it" type="button">🇮🇹 Italiano</button>
                     <button class="language-btn" data-lang="en" type="button">🇬🇧 English</button>
                 </div>
             </div>
@@ -316,8 +323,8 @@
         <aside class="map-sidebar beta-sidebar">
             <button type="button" class="sidebar-close-btn" aria-label="Close panel">×</button>
             <span class="eyebrow beta-eyebrow">EXPERIMENTAL · NOT AN OFFICIAL FORECAST</span>
-            <h3>Terrain danger prototype</h3>
-            <div class="terrain-critical-warning"><strong>Never use this layer to downgrade the official bulletin.</strong> The displayed advisory index has a conservative floor derived from the current regional bulletin; local terrain and weather can only raise it.</div>
+            <h3>Terrain context prototype</h3>
+            <div class="terrain-critical-warning"><strong>Never use this layer to downgrade the official bulletin.</strong> Official regional danger and experimental terrain context are shown separately. This layer is not a local forecast or a probability.</div>
             <p class="muted">Click anywhere to recalculate a route-scale window around that point. The prototype derives elevation, slope, aspect, approximate overhead steep-terrain exposure, recent snow/rain, and lee-side wind loading.</p>
             <div class="form-group">
                 <label for="terrain-radius">Analysis radius</label>
@@ -337,15 +344,15 @@
             </div>
             <div id="terrain-beta-status" class="terrain-beta-status"><p><em>Click a location in the Pyrenees to build the experimental layer.</em></p></div>
             <div class="terrain-beta-legend">
-                <strong>Advisory index</strong>
+                <strong>Experimental terrain / weather context</strong>
                 <div class="terrain-gradient"></div>
                 <div class="legend-range"><span>lower</span><span>higher</span></div>
-                <small>This is a conservative decision-support index, not an EAWS danger level for an individual slope.</small>
+                <small>Purple indicates a stronger modelled signal, not an EAWS level. Pale cells are not safe slopes.</small>
             </div>
             <div class="official-card">
                 <strong>Prototype inputs</strong>
-                <p class="status-note">DEM: adaptive official-source terrain where configured (IGN RGE ALTI in France; ICGC terrain WCS in Catalonia/Val d’Aran), with an explicit Copernicus/Open-Meteo fallback elsewhere. Weather: Open-Meteo. Official prior: current EAWS warning-region layer already used by this app.</p>
-                <p class="status-note"><strong>Terrain engine:</strong> uses the highest-resolution configured elevation source available, derives local slope/aspect/curvature, start-zone susceptibility, connected steep terrain and a runout-corridor proxy, then combines these with recent weather and the official bulletin floor.</p>
+                <p class="status-note">DEM: adaptive official-source terrain where configured (IGN RGE ALTI in France; ICGC terrain WCS in Catalonia/Val d’Aran), with an explicit Copernicus/Open-Meteo fallback elsewhere. Weather: Open-Meteo. Official context: current EAWS warning-region layer already used by this app.</p>
+                <p class="status-note"><strong>Terrain engine:</strong> uses the highest-resolution configured elevation source available, derives local slope/aspect/curvature, start-zone susceptibility, connected steep terrain and a runout-corridor proxy, then combines these with recent weather. The official bulletin is displayed separately.</p>
             </div>
         </aside>
     </main>
@@ -465,6 +472,7 @@
                             <a class="resource-card" href="https://www.aemet.es/es/eltiempo/prediccion/montana/boletin_peligro_aludes" target="_blank" rel="noopener"><strong>Spanish Pyrenees · AEMET</strong><span>Official Spanish mountain avalanche bulletins, including Pyrenean sectors.</span></a>
                             <a class="resource-card" href="https://www.meteo.ad/estatneu" target="_blank" rel="noopener"><strong>Andorra · Meteo.ad</strong><span>Official Andorran snow and avalanche information.</span></a>
                             <a class="resource-card" href="https://meteofrance.com/meteo-montagne/pyrenees" target="_blank" rel="noopener"><strong>French Pyrenees · Météo-France BERA</strong><span>Official avalanche-risk bulletins for the French Pyrenees.</span></a>
+                            <a class="resource-card" href="https://lauegi.report/" target="_blank" rel="noopener"><strong><img class="regional-flag" src="/assets/flags/aran.svg" alt=""> Val d’Aran · Lauegi</strong><span>Official avalanche bulletin for Val d’Aran.</span></a>
                             <a class="resource-card" href="https://www.avalanches.org/" target="_blank" rel="noopener"><strong>European Avalanche Warning Services</strong><span>European standards, danger scale, avalanche problems and warning-service network.</span></a>
                         </div>
                     </article>
@@ -501,11 +509,11 @@
                         <h3>Main rescue contacts across the Pyrenees</h3>
                         <p><strong>112 works across the European Union</strong> and is the best default when you are unsure which specialist service covers the incident.</p>
                         <div class="emergency-grid">
-                            <div class="emergency-card"><h4><span class="senyera-flag" aria-hidden="true"></span> Catalonia</h4><p class="phone-number">112</p><p>Emergency coordination dispatches the appropriate mountain-rescue resources, including Bombers de la Generalitat/GRAE where applicable.</p></div>
-                            <div class="emergency-card"><h4>🏔️ Val d'Aran</h4><p class="phone-number">112</p><p>Use 112 for mountain incidents; emergency coordination can activate Pompièrs d'Aran and other required resources.</p></div>
-                            <div class="emergency-card"><h4>🇪🇸 Aragón / Navarra / Spain</h4><p class="phone-number">112</p><p>Regional emergency coordination dispatches Guardia Civil mountain rescue and medical/fire resources as required.</p></div>
-                            <div class="emergency-card"><h4>🇦🇩 Andorra</h4><p class="phone-number">112</p><p>Mountain rescue/emergency coordination. Andorran official emergency contacts also list 118 for firefighters and 116 for medical emergencies.</p></div>
-                            <div class="emergency-card"><h4>🇫🇷 French Pyrenees</h4><p class="phone-number">112</p><p>European emergency number. France also uses 18 for fire/rescue and 17 for police/gendarmerie; mountain rescue is dispatched according to location.</p></div>
+                            <div class="emergency-card"><h4><span class="senyera-flag" aria-hidden="true"></span> Pirineu català</h4><p class="phone-number">112</p><p>Emergency coordination dispatches the appropriate mountain-rescue resources, including Bombers de la Generalitat/GRAE where applicable.</p></div>
+                            <div class="emergency-card"><h4><img class="regional-flag" src="/assets/flags/aran.svg" alt=""> Val d'Aran</h4><p class="phone-number">112</p><p>Use 112 for mountain incidents; emergency coordination can activate Pompièrs d'Aran and other required resources.</p></div>
+                            <div class="emergency-card"><h4>🇪🇸 Pirineo aragonés/navarro</h4><p class="phone-number">112</p><p>Regional emergency coordination dispatches Guardia Civil mountain rescue and medical/fire resources as required.</p></div>
+                            <div class="emergency-card"><h4>🇦🇩 Prineus andorrans</h4><p class="phone-number">112</p><p>Mountain rescue/emergency coordination. Andorran official emergency contacts also list 118 for firefighters and 116 for medical emergencies.</p></div>
+                            <div class="emergency-card"><h4>🇫🇷 Pyrénées française</h4><p class="phone-number">112</p><p>European emergency number. France also uses 18 for fire/rescue and 17 for police/gendarmerie; mountain rescue is dispatched according to location.</p></div>
                         </div>
                         <h4>Information to give rescuers</h4>
                         <ul class="knowledge-list"><li>Exact coordinates and mountain/route name</li><li>What happened and whether avalanche danger remains</li><li>Number caught, buried, injured and accounted for</li><li>Time of avalanche/burial and transceiver status</li><li>Weather, visibility and safe access/landing information if known</li><li>Your callback number and remaining group resources</li></ul>
@@ -515,6 +523,7 @@
                         <h3>Further learning & official resources</h3>
                         <div class="resource-grid">
                             <a class="resource-card" href="https://avysavvy.avalanche.ca/" target="_blank" rel="noopener"><strong>Avalanche Canada · Avy Savvy</strong><span>Excellent structured introduction to avalanches, terrain, forecasts and companion rescue.</span></a>
+                            <a class="resource-card" href="https://lauegi.report/" target="_blank" rel="noopener"><strong><img class="regional-flag" src="/assets/flags/aran.svg" alt=""> Val d’Aran · Lauegi</strong><span>Official avalanche bulletin for Val d’Aran.</span></a>
                             <a class="resource-card" href="https://www.avalanches.org/" target="_blank" rel="noopener"><strong>EAWS</strong><span>European danger scale, avalanche problems, standards and warning-service network.</span></a>
                             <a class="resource-card" href="https://bpa.icgc.cat/" target="_blank" rel="noopener"><strong>ICGC BPA</strong><span>Official Catalan avalanche danger bulletin.</span></a>
                             <a class="resource-card" href="https://www.aemet.es/es/eltiempo/prediccion/montana/boletin_peligro_aludes" target="_blank" rel="noopener"><strong>AEMET avalanche information</strong><span>Official Spanish mountain avalanche bulletins and supporting information.</span></a>
@@ -530,6 +539,11 @@
 
     <main id="page4" class="page-view">
         <div class="content-container about-container">
+<section class="mountain-gallery" aria-label="Mountain photographs">
+<figure class="mountain-photo"><img src="/assets/backgrounds/snow-detail.jpg" alt="Snow crystals and layers in the Pyrenees" loading="lazy"><figcaption>Snow, up close</figcaption><p class="photo-empty" hidden>Add your snow photograph</p></figure>
+<figure class="mountain-photo"><img src="/assets/backgrounds/mountain-landscape.jpg" alt="A mountain landscape in the Pyrenees" loading="lazy"><figcaption>Our mountain landscape</figcaption><p class="photo-empty" hidden>Add your mountain photograph</p></figure>
+<figure class="mountain-photo"><img src="/assets/backgrounds/field-day.jpg" alt="Field observation during a mountain day" loading="lazy"><figcaption>A day in the field</figcaption><p class="photo-empty" hidden>Add your field photograph</p></figure>
+</section>
             <section class="about-hero">
                 <span class="eyebrow">ABOUT THE PROJECT</span>
                 <h2>Built by friends who spend winter in the mountains</h2>
@@ -550,6 +564,7 @@
         </div>
     </main>
 
+    <div id="translation-status" class="translation-status" role="status" hidden></div>
     <div class="license-badge" aria-label="Project licensing">© 2026 Pyrenees Avalanche Network · <a href="/LICENSE" target="_blank" rel="noopener">code: MIT</a> · <a href="/MEDIA_LICENSE.md" target="_blank" rel="noopener">personal photographs: all rights reserved</a></div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>

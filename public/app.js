@@ -1,5 +1,11 @@
 document.addEventListener('DOMContentLoaded', () => {
     const $ = id => document.getElementById(id);
+    document.querySelectorAll('.mountain-photo img').forEach(img => {
+        const missing = () => { img.hidden = true; img.parentElement.querySelector('.photo-empty').hidden = false; };
+        img.addEventListener('error', missing);
+        if (img.complete && img.naturalWidth === 0) missing();
+    });
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
     const pyreneesCoords = [42.55, 1.25];
     const charts = {};
     let pendingReport = null;
@@ -151,7 +157,7 @@ document.addEventListener('DOMContentLoaded', () => {
         'Back to edit':'Torna alla modifica','Confirm & publish':'Conferma e pubblica','Daily process':'Processo quotidiano','Avalanche basics':'Basi sulle valanghe','Snowpack':'Manto nevoso','Stability tests':'Test di stabilità','Terrain & decisions':'Terreno e decisioni','Reading the bulletin':'Leggere il bollettino','Equipment':'Attrezzatura','Companion rescue':'Autosoccorso','Rescue contacts':'Contatti soccorso','Resources':'Risorse'
       }
     };
-    const LANGUAGE_META = { en:['🇬🇧','English'], ca:['▰','Català'], es:['🇪🇸','Español'], fr:['🇫🇷','Français'], de:['🇩🇪','Deutsch'], it:['🇮🇹','Italiano'] };
+    const LANGUAGE_META = {ca:['','Català'], oc:['','Aranés'], eu:['','Euskara'], es:['🇪🇸','Español'], fr:['🇫🇷','Français'], en:['🇬🇧','English']};
 
 
     const EXTRA_TRANSLATIONS = {
@@ -170,9 +176,10 @@ document.addEventListener('DOMContentLoaded', () => {
         Object.assign(I18N[lang], values);
         Object.keys(values).forEach(key => { if (!(key in I18N.en)) I18N.en[key] = key; });
     });
+    delete I18N.de; delete I18N.it;
     let currentLanguage = localStorage.getItem('pan-language') || 'en';
     if (!I18N[currentLanguage]) currentLanguage = 'en';
-    const LANGUAGE_LOCALES = { en:'en-GB', ca:'ca-ES', es:'es-ES', fr:'fr-FR', de:'de-DE', it:'it-IT' };
+    const LANGUAGE_LOCALES = { ca:'ca-ES', oc:'oc-ES', eu:'eu-ES', es:'es-ES', fr:'fr-FR', en:'en-GB'};
     function t(source, vars = {}) {
         const dict = I18N[currentLanguage] || I18N.en;
         let text = dict[source] || I18N.en[source] || source;
@@ -205,7 +212,18 @@ document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('.language-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.lang === lang));
         const active = LANGUAGE_META[lang] || LANGUAGE_META.en;
         const current = $('current-language');
-        if (current) current.textContent = `${active[0]} ${active[1]}`;
+        if (current) {
+            current.replaceChildren();
+            if (lang === 'oc') {
+                const flag = document.createElement('img'); flag.className = 'regional-flag'; flag.src = '/assets/flags/aran.svg'; flag.alt = ''; current.append(flag);
+            } else if (lang === 'ca' || lang === 'eu') {
+                const flag = document.createElement('span'); flag.className = lang === 'ca' ? 'senyera-flag' : 'basque-flag'; flag.setAttribute('aria-hidden', 'true'); current.append(flag);
+            }
+            current.append(document.createTextNode(` ${active[0]} ${active[1]}`));
+        }
+        const translationStatus = $('translation-status');
+        translationStatus.hidden = !['oc','eu'].includes(lang);
+        translationStatus.textContent = lang === 'oc' ? 'Aranés: traduccion parciau en revision. Tèxtes non tradusits en anglés.' : 'Euskara: itzulpen partziala, berrikusten. Itzuli gabeko testuak ingelesez.';
         localStorage.setItem('pan-language', lang);
         if (localizationRuntimeReady) {
             if (currentWeatherHistory) renderWeatherCharts(currentWeatherHistory);
@@ -222,7 +240,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const nodes=[]; while(walker.nextNode()) nodes.push(walker.currentNode);
         nodes.forEach(node => {
             const parent = node.parentElement;
-            if (!parent || parent.closest('#page3')) return;
+            if (!parent || parent.closest('script, style, .language-switcher')) return;
             const raw = node.nodeValue; const trimmed = raw.trim();
             if (!trimmed || !dictKeys.has(trimmed)) return;
             if (parent.tagName === 'OPTION') {
@@ -238,16 +256,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const span=document.createElement('span'); span.dataset.i18nSource=trimmed; span.textContent=trimmed; parent.replaceChild(span,node);
         });
         document.querySelectorAll('input[placeholder], textarea[placeholder]').forEach(el => {
-            if (el.closest('#page3')) return;
             if (dictKeys.has(el.placeholder)) el.dataset.i18nPlaceholderSource = el.placeholder;
         });
         document.querySelectorAll('[aria-label]').forEach(el => {
-            if (el.closest('#page3')) return;
             const source = el.getAttribute('aria-label');
             if (dictKeys.has(source)) el.dataset.i18nAriaSource = source;
         });
         document.querySelectorAll('[title]').forEach(el => {
-            if (el.closest('#page3')) return;
             const source = el.getAttribute('title');
             if (dictKeys.has(source)) el.dataset.i18nTitleSource = source;
         });
@@ -430,7 +445,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function loadHistoricalDatasets() {
-        const messages = ['Catalonia: live ICGC inventory'];
+        const messages = ['Catalunya: live ICGC inventory'];
         try {
             const response = await fetchJson('/api/historical-avalanches');
 
@@ -483,7 +498,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const markerPriority = { avalanche: 5, accident: 4, test: 3, snowpack: 2, trip_report: 1 };
-    const markerSymbols = { avalanche: '▲', accident: '!', test: 'T', snowpack: '❄', trip_report: '●' };
+    const markerSymbols = { avalanche: '🏔️', accident: '🚨', test: '🧪', snowpack: '🔎', trip_report: '🎿' };
     const markerLabelKeys = { avalanche: 'Avalanche', accident: 'Incident', test: 'Stability test', snowpack: 'Snowpack', trip_report: 'Trip report' };
     const markerLabel = kind => t(markerLabelKeys[kind] || 'Field report');
 
@@ -763,24 +778,32 @@ document.addEventListener('DOMContentLoaded', () => {
         return shifted.toISOString().slice(0, 16);
     }
 
+    let terrainRequestId = 0;
+    const terrainEdited = new Set();
+    ['form-elevation','form-slope','form-aspect'].forEach(id => $(id).addEventListener('input', () => terrainEdited.add(id)));
     async function autoFillReportTerrain(lat, lng) {
+        const requestId = ++terrainRequestId;
+        terrainEdited.clear();
+        ['form-elevation','form-slope','form-aspect'].forEach(id => { $(id).value = ''; });
         pendingAutoTerrain = null;
         if ($('form-location-summary')) $('form-location-summary').textContent = `${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)} · deriving terrain…`;
         if ($('auto-terrain-note')) $('auto-terrain-note').innerHTML = '<strong>Deriving elevation, slope and aspect from the mapped point…</strong> You can overwrite the values with a better field measurement.';
         try {
             const terrain = await fetchJson(`/api/terrain/point?lat=${Number(lat).toFixed(6)}&lng=${Number(lng).toFixed(6)}`);
+            if (requestId !== terrainRequestId) return;
             pendingAutoTerrain = terrain;
-            if (Number.isFinite(Number(terrain.elevationM))) $('form-elevation').value = Math.round(Number(terrain.elevationM));
-            if (Number.isFinite(Number(terrain.slopeDeg))) $('form-slope').value = Number(terrain.slopeDeg).toFixed(1);
-            if (Number.isFinite(Number(terrain.aspectDeg))) {
+            if (!terrainEdited.has('form-elevation') && Number.isFinite(terrain.elevationM)) $('form-elevation').value = Math.round(Number(terrain.elevationM));
+            if (!terrainEdited.has('form-slope') && Number.isFinite(terrain.slopeDeg)) $('form-slope').value = Number(terrain.slopeDeg).toFixed(1);
+            if (!terrainEdited.has('form-aspect') && Number.isFinite(terrain.aspectDeg)) {
                 const aspect = compassAspect(Number(terrain.aspectDeg));
                 if ([...$('form-aspect').options].some(option => option.value === aspect)) $('form-aspect').value = aspect;
             }
             if ($('form-location-summary')) $('form-location-summary').textContent = `${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)} · ${terrain.sourceLabel || terrain.source || 'terrain model'}`;
             if ($('auto-terrain-note')) $('auto-terrain-note').innerHTML = `<strong>Terrain auto-filled from ${escapeHtml(terrain.sourceLabel || terrain.source || 'available terrain data')}.</strong> Model resolution: ${escapeHtml(terrain.nominalResolutionM ?? 'unknown')} m. Correct these values if your field measurement is better.`;
         } catch (error) {
+            if (requestId !== terrainRequestId) return;
             if ($('form-location-summary')) $('form-location-summary').textContent = `${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)}`;
-            if ($('auto-terrain-note')) $('auto-terrain-note').innerHTML = `<strong>Automatic terrain lookup was unavailable.</strong> Enter elevation, aspect and slope manually. ${escapeHtml(error.message)}`;
+            if ($('auto-terrain-note')) $('auto-terrain-note').innerHTML = `<strong>Automatic terrain lookup was unavailable.</strong> Terrain remains unknown. You may add measurements under Extra terrain parameters. ${escapeHtml(error.message)}`;
         }
     }
 
@@ -882,6 +905,7 @@ document.addEventListener('DOMContentLoaded', () => {
             locationConfidence: value('form-location-confidence'),
             locationMethod: 'map_click',
             autoTerrain: pendingAutoTerrain ? { ...pendingAutoTerrain } : null,
+            terrainOverrides: [...terrainEdited],
             aspect: value('form-aspect'),
             elevation: numberOrNull('form-elevation'),
             slope: numberOrNull('form-slope'),
@@ -1186,7 +1210,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div><span>Terrain source</span><strong>${escapeHtml(data.dem?.sourceLabel || data.dem?.source || '—')}</strong></div>
                 <div><span>Terrain sample</span><strong>${escapeHtml(data.dem?.effectiveSampleSpacingM ?? data.dem?.nominalResolutionM ?? '—')} m</strong></div>
             </div>
-            <p class="terrain-model-note"><strong>How to read this:</strong> the color is the greater of (a) the official regional caution floor and (b) the local terrain/weather proxy. A flat cell may have low local release susceptibility but will not be presented as safer than the official regional context.</p>`;
+            <p class="terrain-model-note">Generated: ${escapeHtml(data.generatedAt || 'Unknown')} · Bulletin date: ${escapeHtml(b.dangerDate || 'Unknown')}</p>
+            ${data.dem?.warning ? `<p class="terrain-critical-warning">${escapeHtml(data.dem.warning)}</p>` : ''}
+            <p class="terrain-model-note">${escapeHtml(data.dem?.note || '')}</p>
+            <p class="terrain-model-note"><strong>How to read this:</strong> purple shows the experimental local terrain/weather signal. Official danger is separate above. This is a hand-built heuristic, not a trained model, probability or safe-route assessment. Historical overlays are contextual and are not yet model inputs.</p>`;
     }
 
     function renderTerrainCells(data) {
@@ -1203,8 +1230,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const ctx = canvas.getContext('2d');
         const image = ctx.createImageData(size, size);
         const rgb = hex => { const h=hex.replace('#',''); return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)]; };
-        const colorStops = [[0,[90,168,95]],[.25,[90,168,95]],[.45,[217,199,61]],[.65,[233,138,47]],[.82,[207,66,56]],[1,[114,27,39]]];
-        const scoreAt = (r,c) => Number(cells[Math.max(0,Math.min(n-1,r))*n + Math.max(0,Math.min(n-1,c))]?.advisoryScore)||0;
+        const colorStops = [[0,[241,238,246]],[.25,[215,181,216]],[.45,[189,128,189]],[.65,[153,73,163]],[.82,[118,36,137]],[1,[73,0,106]]];
+        const scoreAt = (r,c) => Number(cells[Math.max(0,Math.min(n-1,r))*n + Math.max(0,Math.min(n-1,c))]?.localTerrainScore)||0;
         const colorAt = v => {
             for (let i=1;i<colorStops.length;i++) {
                 if (v<=colorStops[i][0]) { const [a,ca]=colorStops[i-1], [b,cb]=colorStops[i]; const t=(v-a)/Math.max(.0001,b-a); return ca.map((x,j)=>Math.round(x+(cb[j]-x)*t)); }
@@ -1230,6 +1257,8 @@ document.addEventListener('DOMContentLoaded', () => {
     async function analyzeTerrainAt(lat, lng) {
         const radiusKm = Number($('terrain-radius')?.value) || 10;
         const serial = ++terrainBetaRequestSerial;
+        if (terrainBetaSurfaceLayer) { mapBeta.removeLayer(terrainBetaSurfaceLayer); terrainBetaSurfaceLayer = null; }
+        terrainBetaGridLayer.clearLayers();
         if (terrainBetaRequestController) terrainBetaRequestController.abort();
         terrainBetaRequestController = new AbortController();
         $('terrain-beta-status').innerHTML = '<p><strong>Updating terrain layer…</strong><br><span class="muted">Loading route-scale topography first; weather and bulletin context are added to the same surface.</span></p>';

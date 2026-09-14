@@ -18,3 +18,6 @@ CREATE INDEX IF NOT EXISTS idx_obs_type_season ON observations (type, season_yea
 
 ALTER TABLE observations ADD COLUMN IF NOT EXISTS owner_token_hash TEXT;
 CREATE INDEX IF NOT EXISTS idx_obs_owner ON observations (owner_token_hash);
+
+-- The server uses the table owner connection; no direct anonymous REST policies.
+ALTER TABLE observations ENABLE ROW LEVEL SECURITY;
