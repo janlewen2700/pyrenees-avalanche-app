@@ -116,4 +116,16 @@ Passed: JavaScript syntax checks; server integration checks for routing, unknown
 
 Not verified: your live Supabase or Render environment, upstream terrain availability from Render, raster pipelines against real DEMs, complete translations, native-speaker terminology, visual browser/mobile layout. Browser installation failed in this environment, so perform the checklist in `tests/MANUAL_QA.md` before deployment. Original photographs remain yours to restore.
 
+
+## Run Locally
+```
+$bash
+$ brew services start postgresql
+$ npm install
+$ npm start
+```
+
+The command `npm start`, gives a local host and the webpage can be seen locally. The following is just for some test. Run a program to read all files inside the folder and then it is easier to send to AI for explanations. 
+
 Run locally with Node and `npm ci`, then `npm start`. Run `npm run check`, `python tests/server-smoke.py`, and `node --test tests/terrain-form.test.cjs`. Install `ml/requirements.txt` in a virtual environment before `python tests/ml-smoke.py`. No credentials or private datasets are included.
+
