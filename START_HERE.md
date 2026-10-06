@@ -118,11 +118,11 @@ Not verified: your live Supabase or Render environment, upstream terrain availab
 
 
 ## Run Locally
-```
-$bash
-$ brew services start postgresql
-$ npm install
-$ npm start
+On a linux/mac (On windows, ask AI) with brew you can run this:
+```bash
+brew services start postgresql
+npm install
+npm start
 ```
 
 The command `npm start`, gives a local host and the webpage can be seen locally. The following is just for some test. Run a program to read all files inside the folder and then it is easier to send to AI for explanations. 
