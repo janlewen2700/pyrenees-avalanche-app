@@ -1,0 +1,34 @@
+# Installed dependencies and Python environments
+node_modules/
+.venv/
+venv/
+
+# Python caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local settings and credentials
+.env
+.env.*
+!.env.example
+
+# Local observations and downloaded research data
+data/observations.json*
+data/historical/*.geojson
+data/terrain/
+data/labels/
+ml/data/
+models/
+runs/
+*.tif
+*.tiff
+*.parquet
+*.joblib
+*.pkl
+tmp*/
+
+# Operating system files
+.DS_Store
+Thumbs.db
+Desktop.ini
